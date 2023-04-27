@@ -1,15 +1,14 @@
-use tower_http::trace::TraceLayer;
-use tower_http::cors::CorsLayer;
 use std::net::SocketAddr;
+use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
-use axum::{Router, http::HeaderValue};
+use axum::{http::HeaderValue, Router};
 use tracing::debug;
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-
-    let router = Router::new();
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 2001));
     debug!("Listening on {}", addr);
@@ -22,8 +21,9 @@ async fn main() {
 
     let trace_layer = TraceLayer::new_for_http();
 
-    let router = router.layer(cors_layer).layer(trace_layer);
+    let router = Router::new().nest_service("/assets", ServeDir::new("../frontend/assets"));
 
+    let router = router.layer(cors_layer).layer(trace_layer);
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
