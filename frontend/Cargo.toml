@@ -9,3 +9,4 @@ edition = "2021"
 console_error_panic_hook = "0.1.7"
 leptos = { version = "0.2.5", features = ["tracing"] }
 tracing-wasm = "0.2.1"
+wire = { path = "../wire" }
