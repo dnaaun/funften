@@ -169,6 +169,7 @@ pub struct TodoData {
     estimated_duration: Duration,
     planned_executions: Vec<PlannedExecutionData>,
     actual_executions: Vec<ActualExecutionData>,
+    child_todos: Vec<Box<TodoData>>,
 }
 
 pub struct Todo(MapRef);
@@ -211,6 +212,19 @@ impl Todo {
                 actual_executions_map.push_back(txn, MapPrelim::<&str>::from(HashMap::new())),
                 txn,
                 a,
+            );
+        });
+
+        let child_todos_map = map.insert(
+            txn,
+            "child_todos",
+            ArrayPrelim::<_, &str>::from([]), // I don't think the // type matters
+        );
+        data.child_todos.into_iter().for_each(|c| {
+            Todo::new(
+                child_todos_map.push_back(txn, MapPrelim::<&str>::from(HashMap::new())),
+                txn,
+                *c,
             );
         });
 
@@ -348,6 +362,22 @@ impl Todo {
             panic!("`Todo.actual_executions` not found, or of invalid type")
         }
     }
+
+    pub fn child_todos(&self, txn: &impl ReadTxn) -> Vec<Todo> {
+        // We don't follow the usual thing of `maybe_` and `unwrap` because we want to avoid
+        // validation.
+        if let Value::YArray(value) = self.0.get(txn, "child_todos").unwrap() {
+            value
+                .iter(txn)
+                .map(|p| match p {
+                    Value::YMap(p) => Todo::parse(p, txn).unwrap(),
+                    _ => panic!("`Todo.child_todos` not found, or of invalid type"),
+                })
+                .collect()
+        } else {
+            panic!("`Todo.child_todos` not found, or of invalid type")
+        }
+    }
 }
 
 pub struct State(MapRef);
@@ -435,6 +465,7 @@ mod tests {
                     start: chrono::Utc::now(),
                     end: None,
                 }],
+                child_todos: vec![],
             }],
         );
     }
