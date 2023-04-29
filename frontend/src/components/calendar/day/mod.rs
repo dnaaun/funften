@@ -1,5 +1,5 @@
-use leptos::html::div;
 use crate::components::calendar::day::period::Period;
+use leptos::html::div;
 use leptos::leptos_dom::Each;
 use leptos::*;
 

@@ -13,9 +13,13 @@ pub enum SubPeriod {
 pub fn Period(cx: Scope, periods: Vec<SubPeriod>) -> impl IntoView {
     div(cx)
         .prop("style", "minwidth: 80px")
-        .classes("bg-blue-500 text-white
+        .classes(
+            "bg-blue-500 text-white
 p-1
 rounded-sm
-")
+shadow-sm
+shadow-gray-400
+",
+        )
         .child("s=kjjkup")
 }

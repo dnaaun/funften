@@ -1,8 +1,8 @@
-use leptos::html::div;
 use frontend::components::calendar::{
     day::{length::Length, period::SubPeriod},
     Calendar,
 };
+use leptos::html::div;
 use leptos::*;
 use wire::state::State;
 
@@ -21,6 +21,7 @@ fn main() {
 
         div(cx)
             .child(div(cx).classes("h-9"))
-            .child(Calendar(cx, days())).into_view(cx)
+            .child(Calendar(cx, days()))
+            .into_view(cx)
     })
 }
