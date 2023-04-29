@@ -262,8 +262,6 @@ impl Todo {
         match planned_executions {
             Value::YArray(planned_executions) => planned_executions
                 .iter(txn)
-                // .collect::<Vec<_>>()
-                // .into_iter()
                 .map(|p| match p {
                     Value::YMap(p) => PlannedExecution::parse(p, txn).ok(),
                     _ => None,
@@ -278,8 +276,6 @@ impl Todo {
         match actual_executions {
             Value::YArray(actual_executions) => actual_executions
                 .iter(txn)
-                .collect::<Vec<_>>()
-                .into_iter()
                 .map(|p| match p {
                     Value::YMap(p) => ActualExecution::parse(p, txn).ok(),
                     _ => None,
@@ -311,8 +307,6 @@ impl Todo {
         if let Value::YArray(value) = self.0.get(txn, "planned_executions").unwrap() {
             value
                 .iter(txn)
-                // .collect::<Vec<_>>()
-                // .into_iter()
                 .map(|p| match p {
                     Value::YMap(p) => PlannedExecution::parse(p, txn).unwrap(),
                     _ => panic!("`Todo.planned_executions` not found, or of invalid type"),
@@ -329,8 +323,6 @@ impl Todo {
         if let Value::YArray(value) = self.0.get(txn, "actual_executions").unwrap() {
             value
                 .iter(txn)
-                .collect::<Vec<_>>()
-                .into_iter()
                 .map(|p| match p {
                     Value::YMap(p) => ActualExecution::parse(p, txn).unwrap(),
                     _ => panic!("`Todo.actual_executions` not found, or of invalid type"),
@@ -370,14 +362,28 @@ impl State {
         match todos {
             Value::YArray(todos) => todos
                 .iter(txn)
-                .collect::<Vec<_>>()
-                .into_iter()
                 .map(|p| match p {
                     Value::YMap(p) => Todo::parse(p, txn).ok(),
                     _ => None,
                 })
                 .collect(),
             _ => return None,
+        }
+    }
+
+    pub fn todos(&self, txn: &impl ReadTxn) -> Vec<Todo> {
+        // We don't follow the usual thing of `maybe_` and `unwrap` because we want to avoid
+        // validation.
+        if let Value::YArray(value) = self.0.get(txn, "todos").unwrap() {
+            value
+                .iter(txn)
+                .map(|p| match p {
+                    Value::YMap(p) => Todo::parse(p, txn).unwrap(),
+                    _ => panic!("`State.todos` not found, or of invalid type"),
+                })
+                .collect()
+        } else {
+            panic!("`State.todos` not found, or of invalid type")
         }
     }
 }
