@@ -236,6 +236,8 @@ impl Todo {
         todo.maybe_actual_executions(txn).ok_or(anyhow!(
             "`Todo.actual_executions` not found, or of invalid type"
         ))?;
+        todo.maybe_child_todos(txn)
+            .ok_or(anyhow!("`Todo.child_todos` not found, or of invalid type"))?;
         Ok(todo)
     }
 
@@ -278,6 +280,20 @@ impl Todo {
                 .iter(txn)
                 .map(|p| match p {
                     Value::YMap(p) => ActualExecution::parse(p, txn).ok(),
+                    _ => None,
+                })
+                .collect(),
+            _ => return None,
+        }
+    }
+
+    fn maybe_child_todos(&self, txn: &impl ReadTxn) -> Option<Vec<Todo>> {
+        let child_todos = self.0.get(txn, "child_todos")?;
+        match child_todos {
+            Value::YArray(child_todos) => child_todos
+                .iter(txn)
+                .map(|p| match p {
+                    Value::YMap(p) => Todo::parse(p, txn).ok(),
                     _ => None,
                 })
                 .collect(),
