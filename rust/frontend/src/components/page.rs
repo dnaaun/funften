@@ -15,15 +15,15 @@ pub fn Page(cx: Scope) -> impl IntoView {
             .take(7)
             .collect::<Vec<_>>(),
     );
+
+    let cur_entry = create_rw_signal(
+        cx,
+        TypeSpecific::ActualExecution {
+            start: None.into(),
+            end: None.into(),
+        },
+    );
     div(cx)
-        .child(Entry(
-            cx,
-            "Hello".into(),
-            TypeSpecific::ActualExecution {
-                start: None.into(),
-                end: None.into(),
-            }
-            .into(),
-        ))
+        .child(Entry(cx, "Hello".into(), cur_entry))
         .child(Calendar(cx, days()))
 }
