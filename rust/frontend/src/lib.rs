@@ -1,3 +1,3 @@
 #![feature(never_type)]
 pub mod components;
-pub mod signal_utils;
+pub mod leptos_utils;

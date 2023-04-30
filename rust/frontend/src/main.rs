@@ -1,27 +1,17 @@
-use frontend::components::calendar::{
-    day::{length::Length, period::SubPeriod},
-    Calendar,
-};
-use leptos::html::div;
+use wasm_bindgen::prelude::JsCast;
+use frontend::components::page::Page;
 use leptos::*;
-use wire::state::State;
 
 fn main() {
     console_error_panic_hook::set_once();
     tracing_wasm::set_as_global_default();
 
-    mount_to_body(|cx| {
-        let (days, _) = create_signal(
-            cx,
-            std::iter::from_fn(|| Some(vec![vec![SubPeriod::Actual(Length(60))]]))
-                .cycle()
-                .take(7)
-                .collect::<Vec<_>>(),
-        );
-
-        div(cx)
-            .child(div(cx).classes("h-9"))
-            .child(Calendar(cx, days()))
-            .into_view(cx)
-    })
+    let root_el = web_sys::window()
+        .unwrap()
+        .document()
+        .unwrap()
+        .get_element_by_id("root");
+    // turn the above from an `Element` to a `HtmlElement`
+    let root_el = root_el.unwrap().dyn_into::<web_sys::HtmlElement>().unwrap();
+    mount_to(root_el, Page);
 }

@@ -15,7 +15,7 @@ pub fn Day(cx: Scope, periods: Vec<Vec<SubPeriod>>) -> impl IntoView {
             "flex flex-col
             flex-grow
             border-l border-gray-200
-            pr-2
+            pl-1 pr-2
             ",
         )
         .child(Each::new(

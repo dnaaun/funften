@@ -16,7 +16,7 @@ pub fn Period(cx: Scope, periods: Vec<SubPeriod>) -> impl IntoView {
         .classes(
             "bg-blue-500 text-white
 p-1
-rounded-sm
+rounded-md
 shadow-sm
 shadow-gray-400
 ",

@@ -42,7 +42,10 @@ where
                                     .prop("href", "#")
                                     .classes("block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white")
                                     .child(item.text)
-                                    .on(ev::click, move |_| (item.on_click)())
+                                    .on(ev::click, move |e| {
+                                            e.prevent_default(); // to avoid #hash part of URL from changing
+                                            (item.on_click)()
+                                        })
                             )
                                 
                     }
