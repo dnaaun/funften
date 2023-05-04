@@ -1,10 +1,14 @@
+use std::rc::Rc;
+
+use crate::components::dropdown::DropdownItem;
 use chrono::DateTime;
 use chrono::Duration;
 use chrono::Utc;
 use leptos::html::*;
 use leptos::*;
 
-use crate::components::select::Select;
+use super::dropdown::Dropdown;
+use super::select::select_button::SelectButton;
 
 #[derive(Clone)]
 pub enum TypeSpecific {
@@ -26,48 +30,75 @@ pub enum TypeSpecific {
 pub fn Entry(
     cx: Scope,
     text: MaybeSignal<String>,
-    type_specific: RwSignal<TypeSpecific>,
+    type_specific: ReadSignal<TypeSpecific>,
+    set_type_specific: WriteSignal<TypeSpecific>,
 ) -> impl IntoView {
-    #[derive(Clone)]
-    enum EntryType {
-        PlannedExecution,
-        ActualExecution,
-        Todo,
-    }
+    let dropdown_items: Vec<_> = vec![
+        DropdownItem {
+            text: "Planned Execution".into_view(cx),
+            key: "planned_execution".into(),
+            on_click: Rc::new(move || match type_specific.get() {
+                TypeSpecific::PlannedExecution { .. } => (),
+                TypeSpecific::ActualExecution { start, end } => {
+                    set_type_specific(TypeSpecific::PlannedExecution { start, end })
+                }
+                TypeSpecific::Todo { .. } => set_type_specific(TypeSpecific::PlannedExecution {
+                    start: None.into(),
+                    end: None.into(),
+                }),
+            }),
+        },
+        DropdownItem {
+            text: "Actual Execution".into_view(cx),
+            key: "actual_execution".into(),
+            on_click: Rc::new(move || match type_specific.get() {
+                TypeSpecific::ActualExecution { .. } => (),
+                TypeSpecific::PlannedExecution { start, end } => {
+                    set_type_specific(TypeSpecific::ActualExecution { start, end })
+                }
+                TypeSpecific::Todo { .. } => set_type_specific(TypeSpecific::ActualExecution {
+                    start: None.into(),
+                    end: None.into(),
+                }),
+            }),
+        },
+        DropdownItem {
+            text: "Todo".into_view(cx),
+            key: "todo".into(),
+            on_click: Rc::new(move || match type_specific.get() {
+                TypeSpecific::ActualExecution { .. } | TypeSpecific::PlannedExecution { .. } => {
+                    set_type_specific(TypeSpecific::Todo {
+                        completed: None.into(),
+                        estimated_duration: None.into(),
+                    })
+                }
 
-    impl From<&TypeSpecific> for EntryType {
-        fn from(type_specific: &TypeSpecific) -> Self {
-            match type_specific {
-                TypeSpecific::PlannedExecution { .. } => EntryType::PlannedExecution,
-                TypeSpecific::ActualExecution { .. } => EntryType::ActualExecution,
-                TypeSpecific::Todo { .. } => EntryType::Todo,
-            }
-        }
-    }
+                TypeSpecific::Todo { .. } => set_type_specific(TypeSpecific::ActualExecution {
+                    start: None.into(),
+                    end: None.into(),
+                }),
+            }),
+        },
+    ];
 
-    impl std::fmt::Display for EntryType {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str(match self {
-                EntryType::PlannedExecution => "Planned Execution",
-                EntryType::ActualExecution => "Actual Execution",
-                EntryType::Todo => "Todo",
-            })
-        }
-    }
-
-    let entry_type = create_rw_signal(cx, Some((&type_specific.get()).into()));
+    let dropdown = Dropdown(
+        cx,
+        SelectButton(
+            cx,
+            MaybeSignal::derive(cx, move || {
+                match type_specific() {
+                    TypeSpecific::PlannedExecution { .. } => "Planned Execution",
+                    TypeSpecific::ActualExecution { .. } => "Actual Execution",
+                    TypeSpecific::Todo { .. } => "Todo",
+                }
+                .into_view(cx)
+            }),
+        ),
+        dropdown_items.into(),
+    );
 
     div(cx)
         .classes("flex items-stretch w-full")
-        .child(Select(
-            cx,
-            vec![
-                EntryType::PlannedExecution,
-                EntryType::ActualExecution,
-                EntryType::Todo,
-            ]
-            .into(),
-            entry_type,
-        ))
+        .child(dropdown)
         .child(text)
 }

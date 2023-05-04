@@ -34,9 +34,9 @@ pub fn Select<T: Display + Clone>(
         cx,
         SelectButton(
             cx,
-            MaybeSignal::Dynamic(Signal::derive(cx, move || {
+            MaybeSignal::derive(cx, move || {
                 selected.get().map(|i| i.to_string()).unwrap_or("-".into())
-            })),
+            }),
         ),
         dropdown_items.into(),
     )

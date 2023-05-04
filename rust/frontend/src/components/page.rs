@@ -16,7 +16,7 @@ pub fn Page(cx: Scope) -> impl IntoView {
             .collect::<Vec<_>>(),
     );
 
-    let cur_entry = create_rw_signal(
+    let (cur_entry, set_cur_entry) = create_signal(
         cx,
         TypeSpecific::ActualExecution {
             start: None.into(),
@@ -24,6 +24,6 @@ pub fn Page(cx: Scope) -> impl IntoView {
         },
     );
     div(cx)
-        .child(Entry(cx, "Hello".into(), cur_entry))
+        .child(Entry(cx, "Hello".into(), cur_entry, set_cur_entry))
         .child(Calendar(cx, days()))
 }
