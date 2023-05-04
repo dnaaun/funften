@@ -1,8 +1,12 @@
-use crate::{components::button::Button, include_html};
+pub mod select_button;
+
+use crate::components::button::Button;
 use std::{fmt::Display, rc::Rc};
 
 use html::*;
 use leptos::*;
+
+use self::select_button::SelectButton;
 
 use super::dropdown::{Dropdown, DropdownItem};
 
@@ -28,19 +32,11 @@ pub fn Select<T: Display + Clone>(
 
     Dropdown(
         cx,
-        Button(
+        SelectButton(
             cx,
             MaybeSignal::Dynamic(Signal::derive(cx, move || {
-                div(cx)
-                    .classes("flex content-between justify-between items-center")
-                    .child(move || {
-                        div(cx)
-                            .classes("mr-2")
-                            .child(selected.get().map(|i| i.to_string()).unwrap_or("-".into()))
-                    })
-                    .child(include_html!(cx, "../icons/caret-down.svg"))
+                selected.get().map(|i| i.to_string()).unwrap_or("-".into())
             })),
-            || (),
         ),
         dropdown_items.into(),
     )

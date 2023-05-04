@@ -21,7 +21,7 @@ where
     let body_ref = create_node_ref::<Body>(cx);
 
     let (body_style, set_body_style) =
-        create_signal(cx, "display: none; position: fixed;".to_string());
+        create_signal(cx, "display: none; position: absolute;".to_string());
     let body = body.attr("style", body_style).node_ref(body_ref);
 
     let head_on_click = move |_| {
@@ -37,7 +37,7 @@ where
         let body_y = rect.y() + rect.height() + 5.0; // 5.0 for now.
 
         set_body_style(format!(
-            "display: block; position: fixed; left: {}px; top: {}px;",
+            "display: block; position: absolute; left: {}px; top: {}px;",
             body_x, body_y
         ));
 
@@ -53,7 +53,7 @@ where
             let body_el: &web_sys::Node = Deref::deref(&body_el);
 
             if !body_el.contains(Some(event_target)) {
-                set_body_style("display: none; position: fixed;".to_string());
+                set_body_style("display: none; position: absolute;".to_string());
             }
         });
         document().set_onclick(Some(closure.as_ref().unchecked_ref()));
