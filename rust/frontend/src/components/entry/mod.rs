@@ -37,15 +37,23 @@ pub fn Entry(cx: Scope, draft_entry: DraftEntryState) -> impl IntoView {
                 ),
                 TextInput(
                     cx,
-                    start_datetime.into(),
+                    end_datetime.into(),
                     Some("To".into()),
                     datetime_input_props.clone(),
                 ),
             ]
             .into_view(cx),
-            EntryTypeState::Todo => div(cx)
-                .child(Duration(cx, estimated_duration.clone()))
+            EntryTypeState::Todo => vec![
+                Duration(cx, estimated_duration.clone()).into_view(cx),
+                TextInput(
+                    cx,
+                    completed_at.into(),
+                    Some("Completed At".into()),
+                    datetime_input_props.clone(),
+                )
                 .into_view(cx),
+            ]
+            .into_view(cx),
         })
     };
 
