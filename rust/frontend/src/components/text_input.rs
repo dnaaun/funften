@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use html::*;
-use leptos::*;
+use leptos::{tracing::info, *};
 
 #[allow(non_snake_case)]
 pub fn TextInput(
     cx: Scope,
-    value: MaybeSignal<String>,
+    value: RwSignal<String>,
     label_text: Option<MaybeSignal<String>>,
     input_props: Option<HashMap<String, String>>,
 ) -> impl IntoView {
@@ -17,7 +17,11 @@ pub fn TextInput(
     });
 
     let input_el = input(cx)
-        .prop("value", move || value.get().to_string())
+        .on(ev::input, move |e| {
+            info!("{}", event_target_value(&e));
+            value.set(event_target_value(&e));
+        })
+        .prop("value", value)
         .classes(
             "bg-gray-50
 border border-gray-300

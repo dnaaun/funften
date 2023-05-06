@@ -11,14 +11,14 @@ pub fn DatePicker(
     date: MaybeSignal<DateTime<Utc>>,
     label_text: Option<MaybeSignal<String>>,
 ) -> impl IntoView {
-    TextInput(
-        cx,
-        "".to_owned().into(),
-        label_text,
-        Some(
-            [("type".into(), "datetime-local".into())]
-                .into_iter()
-                .collect(),
-        ),
-    )
+    // TextInput(
+    //     cx,
+    //     "".to_owned().into(),
+    //     label_text,
+    //     Some(
+    //         [("type".into(), "datetime-local".into())]
+    //             .into_iter()
+    //             .collect(),
+    //     ),
+    // )
 }

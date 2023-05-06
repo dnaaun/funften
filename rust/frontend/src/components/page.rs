@@ -8,6 +8,7 @@ use chrono::Duration;
 use super::calendar::day::length::Length;
 use super::calendar::day::period::SubPeriod;
 use super::calendar::Calendar;
+use super::duration::{DurationState, DurationType};
 use super::entry::Entry;
 
 #[derive(Clone)]
@@ -33,7 +34,7 @@ pub struct DraftEntryState {
     pub start_datetime: RwSignal<String>,
     pub end_datetime: RwSignal<String>,
     pub completed_at: RwSignal<String>,
-    pub estimated_duration: RwSignal<Duration>,
+    pub estimated_duration: DurationState,
 }
 
 #[allow(non_snake_case)]
@@ -47,12 +48,15 @@ pub fn Page(cx: Scope) -> impl IntoView {
     );
 
     let draft_entry = DraftEntryState {
-        type_: create_rw_signal(cx, Some(EntryTypeState::Todo)),
+        type_: create_rw_signal(cx, Some(EntryTypeState::ActualExecution)),
         text: create_rw_signal(cx, "".into()),
         start_datetime: create_rw_signal(cx, "".into()),
         end_datetime: create_rw_signal(cx, "".into()),
         completed_at: create_rw_signal(cx, "".into()),
-        estimated_duration: create_rw_signal(cx, Duration::seconds(0)),
+        estimated_duration: DurationState {
+            duration_amount: create_rw_signal(cx, Default::default()),
+            duration_type: create_rw_signal(cx, Some(DurationType::Seconds)),
+        },
     };
 
     div(cx)

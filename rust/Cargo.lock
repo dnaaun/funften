@@ -613,6 +613,7 @@ dependencies = [
  "chrono",
  "console_error_panic_hook",
  "derive_more",
+ "js-sys",
  "leptos",
  "tracing-wasm",
  "wasm-bindgen",
