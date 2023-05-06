@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use leptos::html::*;
 use leptos::*;
 
@@ -7,24 +5,8 @@ use super::calendar::day::length::Length;
 use super::calendar::day::period::SubPeriod;
 use super::calendar::Calendar;
 use super::duration::{DurationState, DurationType};
+use super::entry::entry_type::EntryTypeState;
 use super::topbar::TopBar;
-
-#[derive(Clone)]
-pub enum EntryTypeState {
-    PlannedExecution,
-    ActualExecution,
-    Todo,
-}
-
-impl Display for EntryTypeState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EntryTypeState::PlannedExecution => write!(f, "Planned Execution"),
-            EntryTypeState::ActualExecution => write!(f, "Actual Execution"),
-            EntryTypeState::Todo => write!(f, "Todo"),
-        }
-    }
-}
 
 pub struct DraftEntryState {
     pub type_: RwSignal<Option<EntryTypeState>>,

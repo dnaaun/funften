@@ -3,10 +3,10 @@ pub mod entry_type;
 use leptos::html::*;
 use leptos::*;
 
-use self::entry_type::EntryType;
+use self::entry_type::{EntryType, EntryTypeState};
 
 use super::duration::Duration;
-use super::page::{DraftEntryState, EntryTypeState};
+use super::page::DraftEntryState;
 use super::text_input::TextInput;
 
 #[allow(non_snake_case)]
