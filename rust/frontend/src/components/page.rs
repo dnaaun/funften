@@ -3,9 +3,7 @@ use std::fmt::Display;
 use leptos::html::*;
 use leptos::*;
 
-use chrono::DateTime;
 use chrono::Duration;
-use chrono::Utc;
 
 use super::calendar::day::length::Length;
 use super::calendar::day::period::SubPeriod;
@@ -32,10 +30,10 @@ impl Display for EntryTypeState {
 pub struct DraftEntryState {
     pub type_: RwSignal<Option<EntryTypeState>>,
     pub text: RwSignal<String>,
-    pub start: RwSignal<Option<DateTime<Utc>>>,
-    pub end: RwSignal<Option<DateTime<Utc>>>,
-    pub completed: RwSignal<Option<DateTime<Utc>>>,
-    pub estimated_duration: RwSignal<Option<Duration>>,
+    pub start_datetime: RwSignal<String>,
+    pub end_datetime: RwSignal<String>,
+    pub completed_at: RwSignal<String>,
+    pub estimated_duration: RwSignal<Duration>,
 }
 
 #[allow(non_snake_case)]
@@ -50,11 +48,11 @@ pub fn Page(cx: Scope) -> impl IntoView {
 
     let draft_entry = DraftEntryState {
         type_: create_rw_signal(cx, Some(EntryTypeState::Todo)),
-        text: create_rw_signal(cx, "".to_string()),
-        start: create_rw_signal(cx, None),
-        end: create_rw_signal(cx, None),
-        completed: create_rw_signal(cx, None),
-        estimated_duration: create_rw_signal(cx, None),
+        text: create_rw_signal(cx, "".into()),
+        start_datetime: create_rw_signal(cx, "".into()),
+        end_datetime: create_rw_signal(cx, "".into()),
+        completed_at: create_rw_signal(cx, "".into()),
+        estimated_duration: create_rw_signal(cx, Duration::seconds(0)),
     };
 
     div(cx)
