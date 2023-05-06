@@ -3,13 +3,11 @@ use std::fmt::Display;
 use leptos::html::*;
 use leptos::*;
 
-use chrono::Duration;
-
 use super::calendar::day::length::Length;
 use super::calendar::day::period::SubPeriod;
 use super::calendar::Calendar;
 use super::duration::{DurationState, DurationType};
-use super::entry::Entry;
+use super::topbar::TopBar;
 
 #[derive(Clone)]
 pub enum EntryTypeState {
@@ -60,6 +58,6 @@ pub fn Page(cx: Scope) -> impl IntoView {
     };
 
     div(cx)
-        .child(Entry(cx, draft_entry))
+        .child(TopBar(cx, draft_entry))
         .child(Calendar(cx, days()))
 }

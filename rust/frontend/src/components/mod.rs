@@ -8,3 +8,4 @@ pub mod popover;
 pub mod select;
 pub mod datepicker;
 pub mod duration;
+pub mod topbar;
