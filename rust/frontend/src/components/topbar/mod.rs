@@ -4,11 +4,11 @@ use leptos::*;
 use crate::include_html;
 
 use super::entry::Entry;
-use super::page::DraftEntryState;
+use super::page::DraftEntry;
 use super::popover::Popover;
 
 #[allow(non_snake_case)]
-pub fn TopBar(cx: Scope, draft_entry: DraftEntryState) -> HtmlElement<Div> {
+pub fn TopBar(cx: Scope, draft_entry: DraftEntry) -> HtmlElement<Div> {
     div(cx)
         .classes("flex justify-between items-center w-full h-14 px-4 border-b border-gray-200")
         .child(Popover(

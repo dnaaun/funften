@@ -12,7 +12,7 @@ use super::duration::{DurationState, DurationType};
 use super::entry::entry_type::EntryTypeState;
 use super::topbar::TopBar;
 
-pub struct DraftEntryState {
+pub struct DraftEntry {
     pub type_: RwSignal<Option<EntryTypeState>>,
     pub text: RwSignal<String>,
     pub start_datetime: RwSignal<String>,
@@ -21,7 +21,7 @@ pub struct DraftEntryState {
     pub estimated_duration: DurationState,
 }
 
-impl DraftEntryState {
+impl DraftEntry {
     fn new(cx: Scope) -> Self {
         Self {
             type_: create_rw_signal(cx, Some(EntryTypeState::ActualExecution)),
@@ -70,18 +70,22 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
         child_todos: Box::new(vec![]),
     }];
 
+    let draft_entry = DraftEntry::new(cx);
     let start_day = create_rw_signal(cx, test_start_date.naive_utc().date());
-
     let (calendar_props, _) = create_signal(
         cx,
         CalendarProps::init_from_todo_datas_and_start_date(todos, start_day.read_only()),
     );
 
     create_effect(cx, move |_| {
-        info!("calendar_props: {:?}", calendar_props.get().days);
-    });
+        let start_date_formatted = start_day.get().format("%Y-%m-%dT08:00").to_string();
 
-    let draft_entry = DraftEntryState::new(cx);
+        draft_entry.start_datetime.set(start_date_formatted.clone());
+
+        draft_entry
+            .end_datetime
+            .set(start_date_formatted.replace("08:00", "08:45"));
+    });
 
     div(cx)
         .child(TopBar(cx, draft_entry))
