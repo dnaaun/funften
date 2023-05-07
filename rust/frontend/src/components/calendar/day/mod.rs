@@ -1,8 +1,9 @@
+use std::ops::Deref;
 use leptos::html::div;
 use leptos::leptos_dom::Each;
 use leptos::*;
 
-use self::length::FiveMins;
+use self::length::TimeLength;
 use self::period::{Period, PeriodProps, PeriodState};
 
 pub mod length;
@@ -11,7 +12,7 @@ pub mod period;
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PeriodWithOffset {
     pub period: PeriodState,
-    pub offset: FiveMins,
+    pub offset: TimeLength,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -35,7 +36,7 @@ pub fn Day(cx: Scope, props: DayProps) -> impl IntoView {
             |period_with_offsets| period_with_offsets.clone(),
             |cx, item| {
                 div(cx)
-                    .prop("style", format!("margin-top: {}rem", item.offset.0))
+                    .prop("style", format!("margin-top: {}rem", item.offset.deref()))
                     .child(Period(
                         cx,
                         PeriodProps {

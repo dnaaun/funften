@@ -1,20 +1,14 @@
 use chrono::offset::TimeZone;
 use leptos::tracing::info;
-use std::iter::from_fn;
 
-use chrono::{DateTime, Duration, NaiveDate, Timelike, Utc};
+use chrono::{Duration, Timelike, Utc};
 use leptos::html::*;
 use leptos::*;
 use uuid::Uuid;
 use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
 
-use crate::components::calendar::day::DayProps;
-
-use super::calendar::day::length::FiveMins;
-use super::calendar::day::period::{Period, PeriodState};
-use super::calendar::day::PeriodWithOffset;
 use super::calendar::{Calendar, CalendarProps};
-use super::duration::{Duration, DurationState, DurationType};
+use super::duration::{DurationState, DurationType};
 use super::entry::entry_type::EntryTypeState;
 use super::topbar::TopBar;
 
@@ -56,12 +50,18 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
         planned_executions: vec![PlannedExecutionData {
             id: Uuid::new_v4(),
             start: test_start_date,
-            end: test_start_date.with_minute(30).unwrap(),
+            end: test_start_date.with_minute(59).unwrap(),
         }],
         actual_executions: vec![ActualExecutionData {
             id: Uuid::new_v4(),
-            start: test_start_date.with_minute(15).unwrap(),
-            end: None,
+            start: test_start_date.with_minute(5).unwrap(),
+            end: Some(
+                test_start_date
+                    .with_hour(9)
+                    .unwrap()
+                    .with_minute(55)
+                    .unwrap(),
+            ),
         }],
         child_todos: Box::new(vec![]),
     }];
@@ -76,7 +76,6 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
     create_effect(cx, move |_| {
         info!("calendar_props: {:?}", calendar_props.get().days);
     });
-
 
     let draft_entry = DraftEntryState::new(cx);
 

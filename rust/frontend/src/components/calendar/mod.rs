@@ -7,7 +7,7 @@ use leptos::{leptos_dom::Each, tracing::info};
 use leptos_dom::html::div;
 use wire::state::TodoData;
 
-use self::day::{length::FiveMins, period::PeriodState, DayProps, PeriodWithOffset};
+use self::day::{length::TimeLength, period::PeriodState, DayProps, PeriodWithOffset};
 pub mod day;
 
 #[derive(Clone, Debug)]
@@ -50,8 +50,8 @@ impl CalendarProps {
 
                     days[day_index].period_with_offsets.push({
                         PeriodWithOffset {
-                            period: PeriodState::Planned(FiveMins::from(ae.end - ae.start)),
-                            offset: FiveMins::from(ae.start - six_am_on_start_day),
+                            period: PeriodState::Planned(TimeLength::from(ae.end - ae.start)),
+                            offset: TimeLength::from(ae.start - six_am_on_start_day),
                         }
                     })
                 });
@@ -70,13 +70,13 @@ impl CalendarProps {
                         (|| ae.start.with_hour(6)?.with_minute(0)?.with_second(0))().unwrap();
 
                     let period = match ae.end {
-                        Some(end) => PeriodState::Actual(FiveMins::from(end - ae.start)),
+                        Some(end) => PeriodState::Actual(TimeLength::from(end - ae.start)),
                         None => PeriodState::ActualUnbonded,
                     };
                     days[day_index].period_with_offsets.push({
                         PeriodWithOffset {
                             period,
-                            offset: FiveMins::from(ae.start - six_am_on_start_day),
+                            offset: TimeLength::from(ae.start - six_am_on_start_day),
                         }
                     })
                 });

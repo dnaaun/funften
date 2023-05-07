@@ -1,12 +1,12 @@
 use chrono::Duration;
 
 /// A type-safe way to relate phyiscal length with a unit of time.
-/// Represents 5 minutes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FiveMins(pub usize);
+/// Represents some length.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, derive_more::Deref)]
+pub struct TimeLength(usize);
 
-impl From<Duration> for FiveMins {
+impl From<Duration> for TimeLength {
     fn from(duration: Duration) -> Self {
-        Self(duration.num_minutes() as usize / 5)
+        Self(duration.num_minutes() as usize / 30)
     }
 }

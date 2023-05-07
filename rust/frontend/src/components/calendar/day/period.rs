@@ -1,13 +1,14 @@
+use std::ops::Deref;
 use leptos::{*, tracing::info};
 use leptos_dom::html::div;
 
-use super::length::FiveMins;
+use super::length::TimeLength;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum PeriodState {
     ActualUnbonded,
-    Actual(FiveMins),
-    Planned(FiveMins),
+    Actual(TimeLength),
+    Planned(TimeLength),
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -25,7 +26,7 @@ pub fn Period(cx: Scope, props: PeriodProps) -> impl IntoView {
 
     let style = match len {
         None => "height: 0.5rem".into(),
-        Some(l) => format!("height: {}rem", l.0),
+        Some(l) => format!("height: {}rem", l.deref()),
     };
 
     info!("style: {:?}", style);
