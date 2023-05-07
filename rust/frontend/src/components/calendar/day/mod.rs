@@ -25,10 +25,11 @@ pub fn Day(cx: Scope, props: DayProps) -> impl IntoView {
     div(cx)
         .prop("style", "height: 96em")
         .classes(
-            "flex flex-col
-            flex-grow
+            "items-stretch
+flex-grow
             border-l border-gray-200
             pl-1 pr-2
+            relative
             ",
         )
         .child(Each::new(
@@ -36,7 +37,9 @@ pub fn Day(cx: Scope, props: DayProps) -> impl IntoView {
             |period_with_offsets| period_with_offsets.clone(),
             |cx, item| {
                 div(cx)
-                    .prop("style", format!("margin-top: {}rem", item.offset.deref()))
+                    .prop("style", format!("
+width: 95%;
+position: absolute; top: {}rem", item.offset.deref()))
                     .child(Period(
                         cx,
                         PeriodProps {

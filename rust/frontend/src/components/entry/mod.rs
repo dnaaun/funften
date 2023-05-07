@@ -58,7 +58,7 @@ pub fn Entry(cx: Scope, draft_entry: DraftEntryState) -> HtmlElement<Div> {
     };
 
     div(cx)
-        .classes("flex flex-wrap items-center gap-2 py-2 bg-white rounded-md shadow-md p-4")
+        .classes("flex flex-wrap items-center gap-x-2 gap-y-28 py-2 bg-white rounded-md shadow-md p-4")
         .child(EntryType(cx, type_))
         .child(TextInput(
             cx,

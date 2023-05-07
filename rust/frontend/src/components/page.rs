@@ -49,8 +49,12 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
         estimated_duration: Duration::hours(10),
         planned_executions: vec![PlannedExecutionData {
             id: Uuid::new_v4(),
-            start: test_start_date,
-            end: test_start_date.with_minute(59).unwrap(),
+            start: test_start_date.with_hour(10).unwrap(),
+            end: test_start_date
+                .with_hour(10)
+                .unwrap()
+                .with_minute(45)
+                .unwrap(),
         }],
         actual_executions: vec![ActualExecutionData {
             id: Uuid::new_v4(),

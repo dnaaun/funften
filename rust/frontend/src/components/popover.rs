@@ -22,7 +22,9 @@ where
 
     let (body_style, set_body_style) =
         create_signal(cx, "display: none; position: absolute;".to_string());
-    let body = body.attr("style", body_style).node_ref(body_ref);
+    let body = body
+        .classes("z-10")
+        .attr("style", body_style).node_ref(body_ref);
 
     let head_on_click = move |_| {
         let el = head_ref
@@ -37,7 +39,7 @@ where
         let body_y = rect.y() + rect.height() + 5.0; // 5.0 for now.
 
         set_body_style(format!(
-            "display: block; position: absolute; left: {}px; top: {}px;",
+            "position: absolute; left: {}px; top: {}px;",
             body_x, body_y
         ));
 
