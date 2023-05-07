@@ -1,9 +1,9 @@
 use std::iter::repeat;
 
 use crate::components::calendar::day::Day;
-use chrono::{NaiveDate, Timelike};
+use chrono::{DateTime, NaiveDate, Utc};
+use leptos::leptos_dom::Each;
 use leptos::*;
-use leptos::{leptos_dom::Each, tracing::info};
 use leptos_dom::html::div;
 use wire::state::TodoData;
 
@@ -19,8 +19,18 @@ pub struct CalendarProps {
 impl CalendarProps {
     pub fn init_from_todo_datas_and_start_date(
         todo_datas: impl AsRef<Vec<TodoData>>,
-        start_day_signal: ReadSignal<NaiveDate>,
+        start_day: ReadSignal<NaiveDate>,
     ) -> Self {
+        Self {
+            start_day,
+            days: Self::days_prop_from_todo_datas_and_start_date(todo_datas, start_day.get()),
+        }
+    }
+
+    pub fn days_prop_from_todo_datas_and_start_date(
+        todo_datas: impl AsRef<Vec<TodoData>>,
+        start_day: NaiveDate,
+    ) -> Vec<DayProps> {
         let mut days = Vec::from_iter(
             repeat(DayProps {
                 period_with_offsets: Vec::new(),
@@ -28,30 +38,21 @@ impl CalendarProps {
             .take(7),
         );
 
-        let start_day = start_day_signal.get();
         let end_day = start_day + chrono::Duration::days(7);
+        let within_week = |d| d >= start_day && d < end_day;
+        let midnight_before = |d: DateTime<Utc>| d.date().and_hms_opt(0, 0, 0).unwrap();
 
         for todo_data in todo_datas.as_ref() {
             todo_data
                 .planned_executions
                 .iter()
-                .filter(|ae| {
-                    let ae_start = ae.start.naive_utc().date();
-                    info!("Every variable: ae_start: {:?}, end_day: {:?}, start_day >= ae_start && end_day <= ae_start: {:?} ", ae_start, end_day, start_day >= ae_start && end_day <= ae_start);
-                    start_day <= ae_start && end_day >= ae_start
-                })
+                .filter(|e| within_week(e.start.naive_utc().date()))
                 .for_each(|ae| {
                     let day_index = (ae.start.naive_utc().date() - start_day).num_days() as usize;
-
-                    let six_am_on_start_day =
-                        (|| ae.start.with_hour(6)?.with_minute(0)?.with_second(0))().unwrap();
-
-                    info!("SUP: {:?}", ae.start.naive_utc().date());
-
                     days[day_index].period_with_offsets.push({
                         PeriodWithOffset {
                             period: PeriodState::Planned(TimeLength::from(ae.end - ae.start)),
-                            offset: TimeLength::from(ae.start - six_am_on_start_day),
+                            offset: TimeLength::from(ae.start - midnight_before(ae.start)),
                         }
                     })
                 });
@@ -59,15 +60,9 @@ impl CalendarProps {
             todo_data
                 .actual_executions
                 .iter()
-                .filter(|ae| {
-                    let naive_start = ae.start.naive_utc().date();
-                    start_day >= naive_start && end_day <= naive_start
-                })
+                .filter(|e| within_week(e.start.naive_utc().date()))
                 .for_each(|ae| {
                     let day_index = (ae.start.naive_utc().date() - start_day).num_days() as usize;
-
-                    let six_am_on_start_day =
-                        (|| ae.start.with_hour(6)?.with_minute(0)?.with_second(0))().unwrap();
 
                     let period = match ae.end {
                         Some(end) => PeriodState::Actual(TimeLength::from(end - ae.start)),
@@ -76,16 +71,13 @@ impl CalendarProps {
                     days[day_index].period_with_offsets.push({
                         PeriodWithOffset {
                             period,
-                            offset: TimeLength::from(ae.start - six_am_on_start_day),
+                            offset: TimeLength::from(ae.start - midnight_before(ae.start)),
                         }
                     })
                 });
 
-            let days_from_child_todos = CalendarProps::init_from_todo_datas_and_start_date(
-                &todo_data.child_todos,
-                start_day_signal,
-            )
-            .days;
+            let days_from_child_todos =
+                Self::days_prop_from_todo_datas_and_start_date(&todo_data.child_todos, start_day);
 
             days.iter_mut()
                 .zip(days_from_child_todos)
@@ -95,10 +87,7 @@ impl CalendarProps {
                 })
         }
 
-        Self {
-            start_day: start_day_signal,
-            days,
-        }
+        days
     }
 }
 
@@ -114,4 +103,92 @@ w-full",
             |day| day.clone(),
             Day,
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+    use chrono::Timelike;
+    use chrono::{Duration, Utc};
+    use uuid::Uuid;
+    use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
+
+    use crate::components::calendar::day::length::TimeLength;
+    use crate::components::calendar::day::period::PeriodState;
+    use crate::components::calendar::day::PeriodWithOffset;
+
+    use super::CalendarProps;
+
+    #[test]
+    fn test_calendar_init_from_todo_datas() {
+        let start_date = Utc.with_ymd_and_hms(2023, 5, 1, 8, 0, 0).unwrap();
+
+        let todos = vec![TodoData {
+            id: Uuid::new_v4(),
+            text: "My only TODO".into(),
+            completed: false,
+            created_at: start_date,
+            estimated_duration: Duration::hours(10),
+            planned_executions: vec![PlannedExecutionData {
+                id: Uuid::new_v4(),
+                start: start_date,
+                end: (|| start_date.with_hour(9)?.with_minute(45))().unwrap(),
+            }],
+            actual_executions: vec![ActualExecutionData {
+                id: Uuid::new_v4(),
+                start: start_date.with_minute(5).unwrap(),
+                end: None,
+            }],
+            child_todos: Box::new(vec![TodoData {
+                id: Uuid::new_v4(),
+                text: "My child todo".into(),
+                completed: false,
+                created_at: start_date + Duration::days(1),
+                estimated_duration: Duration::hours(7),
+                planned_executions: vec![PlannedExecutionData {
+                    id: Uuid::new_v4(),
+                    start: start_date + Duration::days(1),
+                    end: (|| start_date.with_hour(9)?.with_minute(45))().unwrap()
+                        + Duration::days(1),
+                }],
+                actual_executions: vec![],
+                child_todos: Box::new(vec![]),
+            }]),
+        }];
+
+        let days = CalendarProps::days_prop_from_todo_datas_and_start_date(
+            todos,
+            start_date.naive_utc().date(),
+        );
+
+        assert!(days[2..]
+            .iter()
+            .all(|day| day.period_with_offsets.is_empty()));
+
+        assert_eq!(
+            days[0].period_with_offsets,
+            vec![
+                PeriodWithOffset {
+                    period: PeriodState::Planned(super::day::length::TimeLength::from(
+                        Duration::hours(1) + Duration::minutes(45)
+                    )),
+                    offset: TimeLength::from(Duration::hours(8))
+                },
+                PeriodWithOffset {
+                    period: PeriodState::ActualUnbonded,
+                    offset: TimeLength::from(Duration::hours(8) + Duration::minutes(5))
+                }
+            ]
+        );
+
+        assert_eq!(
+            days[1].period_with_offsets,
+            vec![PeriodWithOffset {
+                period: PeriodState::Planned(super::day::length::TimeLength::from(
+                    Duration::hours(1) + Duration::minutes(45)
+                )),
+                offset: TimeLength::from(Duration::hours(8))
+            },]
+        )
+    }
 }
