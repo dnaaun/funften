@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{cell::RefCell, ops::Deref, rc::Rc};
 use wasm_bindgen::prelude::{Closure, JsCast};
 
 use leptos::{html::ElementDescriptor, *};
@@ -41,9 +41,15 @@ where
             body_x, body_y
         ));
 
+        // We need this Rc<RefCell<Option<Closure>>> because we need to be able to remove the
+        // closure from the event listener when the user clicks outside of the popover.
+        // And GPT-4 helped out a bit here, too.
+        let closure = Rc::new(RefCell::new(Option::<Closure<dyn FnMut(_)>>::None));
+        let closure_rc_clone = closure.clone();
+
         // set a click handler on `Window` to close the popover when the user clicks outside of
         // `body`.
-        let closure = Closure::<dyn FnMut(_)>::new(move |event: web_sys::MouseEvent| {
+        *closure.borrow_mut() = Some(Closure::new(move |event: web_sys::MouseEvent| {
             let event_target = event.target().unwrap();
             let event_target: &web_sys::Node = event_target.dyn_ref().unwrap();
 
@@ -54,12 +60,24 @@ where
 
             if !body_el.contains(Some(event_target)) {
                 set_body_style("display: none; position: absolute;".to_string());
-            }
-        });
-        document().set_onclick(Some(closure.as_ref().unchecked_ref()));
+                event.stop_propagation();
 
-        // https://github.com/rustwasm/wasm-bindgen/blob/0753bec4c6f51d7e27b82c357e65cefab3c61dd3/examples/closures/src/lib.rs#L72-L82
-        closure.forget();
+                if let Some(closure) = closure_rc_clone.take() {
+                    document()
+                        .remove_event_listener_with_callback(
+                            "click",
+                            closure.as_ref().unchecked_ref(),
+                        )
+                        .unwrap();
+                }
+            }
+        }));
+
+        if let Some(closure) = closure.borrow().as_ref() {
+            document()
+                .add_event_listener_with_callback("click", closure.as_ref().unchecked_ref())
+                .unwrap();
+        };
     };
 
     let head = head.node_ref(head_ref).on(ev::click, head_on_click);
