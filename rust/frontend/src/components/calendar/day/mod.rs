@@ -2,16 +2,16 @@ use leptos::html::div;
 use leptos::leptos_dom::Each;
 use leptos::*;
 
-use self::length::Length;
-use self::period::{Period, PeriodProps};
+use self::length::FiveMins;
+use self::period::{Period, PeriodProps, PeriodState};
 
 pub mod length;
 pub mod period;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PeriodWithOffset {
-    pub period: Period,
-    pub offset: Length,
+    pub period: PeriodState,
+    pub offset: FiveMins,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -31,15 +31,17 @@ pub fn Day(cx: Scope, props: DayProps) -> impl IntoView {
             ",
         )
         .child(Each::new(
-            move || {
-                props
-                    .period_with_offsets
-                    .iter()
-                    .cloned()
-                    .map(|p| PeriodProps { period: p.period })
-                    .collect::<Vec<_>>()
-            },
+            move || props.period_with_offsets.clone(),
             |period_with_offsets| period_with_offsets.clone(),
-            Period,
+            |cx, item| {
+                div(cx)
+                    .prop("style", format!("margin-top: {}rem", item.offset.0))
+                    .child(Period(
+                        cx,
+                        PeriodProps {
+                            period: item.period,
+                        },
+                    ))
+            },
         ))
 }

@@ -1,15 +1,20 @@
+use chrono::offset::TimeZone;
+use leptos::tracing::info;
 use std::iter::from_fn;
 
+use chrono::{DateTime, Duration, NaiveDate, Timelike, Utc};
 use leptos::html::*;
 use leptos::*;
+use uuid::Uuid;
+use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
 
 use crate::components::calendar::day::DayProps;
 
-use super::calendar::day::length::Length;
-use super::calendar::day::period::Period;
+use super::calendar::day::length::FiveMins;
+use super::calendar::day::period::{Period, PeriodState};
 use super::calendar::day::PeriodWithOffset;
 use super::calendar::{Calendar, CalendarProps};
-use super::duration::{DurationState, DurationType};
+use super::duration::{Duration, DurationState, DurationType};
 use super::entry::entry_type::EntryTypeState;
 use super::topbar::TopBar;
 
@@ -39,27 +44,43 @@ impl DraftEntryState {
 }
 
 #[allow(non_snake_case)]
-pub fn Page(cx: Scope) -> impl IntoView {
-    let (days, _) = create_signal(
+pub fn Page(cx: Scope) -> HtmlElement<Div> {
+    let test_start_date = Utc.with_ymd_and_hms(2023, 5, 1, 8, 0, 0).unwrap();
+
+    let todos = vec![TodoData {
+        id: Uuid::new_v4(),
+        text: "My only TODO".into(),
+        completed: false,
+        created_at: test_start_date,
+        estimated_duration: Duration::hours(10),
+        planned_executions: vec![PlannedExecutionData {
+            id: Uuid::new_v4(),
+            start: test_start_date,
+            end: test_start_date.with_minute(30).unwrap(),
+        }],
+        actual_executions: vec![ActualExecutionData {
+            id: Uuid::new_v4(),
+            start: test_start_date.with_minute(15).unwrap(),
+            end: None,
+        }],
+        child_todos: Box::new(vec![]),
+    }];
+
+    let start_day = create_rw_signal(cx, test_start_date.naive_utc().date());
+
+    let (calendar_props, _) = create_signal(
         cx,
-        CalendarProps {
-            days: from_fn(|| {
-                Some(DayProps {
-                    period_with_offsets: vec![PeriodWithOffset {
-                        period: Period::Actual(Length(0)),
-                        offset: Length(0),
-                    }],
-                })
-            })
-            .cycle()
-            .take(7)
-            .collect::<Vec<_>>(),
-        },
+        CalendarProps::init_from_todo_datas_and_start_date(todos, start_day.read_only()),
     );
+
+    create_effect(cx, move |_| {
+        info!("calendar_props: {:?}", calendar_props.get().days);
+    });
+
 
     let draft_entry = DraftEntryState::new(cx);
 
     div(cx)
         .child(TopBar(cx, draft_entry))
-        .child(Calendar(cx, days.get()))
+        .child(Calendar(cx, calendar_props.get()))
 }

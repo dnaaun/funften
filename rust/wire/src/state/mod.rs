@@ -1,7 +1,8 @@
-/// The convention here is `maybe_*` methods do "validations" and return `None` if validation fails.
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use std::collections::HashMap;
+/// The convention here is `maybe_*` methods do "validations" and return `None` if validation fails.
+use uuid::Uuid;
 use yrs::{
     types::Value, Array, ArrayPrelim, GetString, Map, MapPrelim, MapRef, ReadTxn, TextPrelim,
     TransactionMut,
@@ -51,6 +52,7 @@ fn string_from_yrs_value(value: Value, txn: &impl ReadTxn) -> Option<String> {
 }
 
 pub struct PlannedExecutionData {
+    pub id: Uuid,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
@@ -105,6 +107,7 @@ impl PlannedExecution {
 }
 
 pub struct ActualExecutionData {
+    pub id: Uuid,
     pub start: DateTime<Utc>,
     pub end: Option<DateTime<Utc>>,
 }
@@ -163,13 +166,14 @@ impl ActualExecution {
 }
 
 pub struct TodoData {
-    text: String,
-    completed: bool,
-    created_at: DateTime<Utc>,
-    estimated_duration: Duration,
-    planned_executions: Vec<PlannedExecutionData>,
-    actual_executions: Vec<ActualExecutionData>,
-    child_todos: Vec<Box<TodoData>>,
+    pub id: Uuid,
+    pub text: String,
+    pub completed: bool,
+    pub created_at: DateTime<Utc>,
+    pub estimated_duration: Duration,
+    pub planned_executions: Vec<PlannedExecutionData>,
+    pub actual_executions: Vec<ActualExecutionData>,
+    pub child_todos: Box<Vec<TodoData>>,
 }
 
 pub struct Todo(MapRef);
@@ -224,7 +228,7 @@ impl Todo {
             Todo::new(
                 child_todos_map.push_back(txn, MapPrelim::<&str>::from(HashMap::new())),
                 txn,
-                *c,
+                c,
             );
         });
 
@@ -436,6 +440,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
     use yrs::Doc;
     use yrs::Transact;
 
@@ -453,19 +458,22 @@ mod tests {
             map,
             &mut txn,
             vec![TodoData {
+                id: Uuid::new_v4(),
                 text: "yo".to_owned(),
                 completed: false,
                 created_at: chrono::Utc::now(),
                 estimated_duration: chrono::Duration::seconds(60),
                 planned_executions: vec![PlannedExecutionData {
+                    id: Uuid::new_v4(),
                     start: chrono::Utc::now(),
                     end: chrono::Utc::now(),
                 }],
                 actual_executions: vec![ActualExecutionData {
+                    id: Uuid::new_v4(),
                     start: chrono::Utc::now(),
                     end: None,
                 }],
-                child_todos: vec![],
+                child_todos: Box::new(vec![]),
             }],
         );
     }
