@@ -2,8 +2,8 @@ use chrono::offset::TimeZone;
 
 use chrono::{Duration, Timelike, Utc};
 use leptos::html::*;
-use leptos::*;
 use leptos::tracing::info;
+use leptos::*;
 use uuid::Uuid;
 use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
 
@@ -76,10 +76,6 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
     );
     let cur_seven_days = Signal::derive(cx, move || {
         CalendarProps::days_prop_from_todo_datas_and_start_date(todos.get(), start_day.get())
-    });
-
-    create_effect(cx, move |_| {
-        info!("cur_seven_days_len: {:?}", cur_seven_days.get().len());
     });
 
     // Auto-fill the start and end datetime fields with the start date corresponding to the day

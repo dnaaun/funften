@@ -51,6 +51,7 @@ fn string_from_yrs_value(value: Value, txn: &impl ReadTxn) -> Option<String> {
     Some(text)
 }
 
+#[derive(Clone)]
 pub struct PlannedExecutionData {
     pub id: Uuid,
     pub start: DateTime<Utc>,
@@ -106,6 +107,7 @@ impl PlannedExecution {
     }
 }
 
+#[derive(Clone)]
 pub struct ActualExecutionData {
     pub id: Uuid,
     pub start: DateTime<Utc>,
@@ -165,6 +167,7 @@ impl ActualExecution {
     }
 }
 
+#[derive(Clone)]
 pub struct TodoData {
     pub id: Uuid,
     pub text: String,

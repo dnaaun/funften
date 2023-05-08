@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use html::*;
-use leptos::{tracing::info, *};
+use leptos::*;
 
 #[allow(non_snake_case)]
 pub fn TextInput(
@@ -18,7 +18,6 @@ pub fn TextInput(
 
     let input_el = input(cx)
         .on(ev::input, move |e| {
-            info!("{}", event_target_value(&e));
             value.set(event_target_value(&e));
         })
         .prop("value", value)

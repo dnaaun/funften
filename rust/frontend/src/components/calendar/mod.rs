@@ -2,7 +2,7 @@ use std::iter::repeat;
 
 use crate::components::calendar::day::Day;
 use chrono::{DateTime, NaiveDate, Utc};
-use leptos::leptos_dom::Each;
+use leptos::tracing::info;
 use leptos::*;
 use leptos_dom::html::div;
 use wire::state::TodoData;
@@ -13,24 +13,25 @@ pub mod day;
 #[derive(Clone, Debug)]
 pub struct CalendarProps {
     pub start_day: Signal<NaiveDate>,
-    pub days: Signal<Vec<DayProps>>,
+    pub days: Signal<Vec<Vec<PeriodWithOffset>>>,
 }
 
 impl CalendarProps {
     pub fn days_prop_from_todo_datas_and_start_date(
         todo_datas: impl AsRef<Vec<TodoData>>,
         start_day: NaiveDate,
-    ) -> Vec<DayProps> {
-        let mut days = Vec::from_iter(
-            repeat(DayProps {
-                period_with_offsets: Vec::new(),
-            })
-            .take(7),
-        );
+    ) -> Vec<Vec<PeriodWithOffset>> {
+        let mut days: Vec<Vec<PeriodWithOffset>> = repeat(Vec::new()).take(7).collect();
 
         let end_day = start_day + chrono::Duration::days(7);
         let within_week = |d| d >= start_day && d < end_day;
-        let midnight_before = |d: DateTime<Utc>| d.date().and_hms_opt(0, 0, 0).unwrap();
+        let midnight_before = |d: DateTime<Utc>| -> DateTime<Utc> {
+            d.date_naive()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_local_timezone(Utc)
+                .unwrap()
+        };
 
         for todo_data in todo_datas.as_ref() {
             todo_data
@@ -39,7 +40,7 @@ impl CalendarProps {
                 .filter(|e| within_week(e.start.naive_utc().date()))
                 .for_each(|ae| {
                     let day_index = (ae.start.naive_utc().date() - start_day).num_days() as usize;
-                    days[day_index].period_with_offsets.push({
+                    days[day_index].push({
                         PeriodWithOffset {
                             period: PeriodState::Planned(TimeLength::from(ae.end - ae.start)),
                             offset: TimeLength::from(ae.start - midnight_before(ae.start)),
@@ -58,7 +59,7 @@ impl CalendarProps {
                         Some(end) => PeriodState::Actual(TimeLength::from(end - ae.start)),
                         None => PeriodState::ActualUnbonded,
                     };
-                    days[day_index].period_with_offsets.push({
+                    days[day_index].push({
                         PeriodWithOffset {
                             period,
                             offset: TimeLength::from(ae.start - midnight_before(ae.start)),
@@ -71,10 +72,7 @@ impl CalendarProps {
 
             days.iter_mut()
                 .zip(days_from_child_todos)
-                .for_each(|(day, day_from_child_todo)| {
-                    day.period_with_offsets
-                        .extend(day_from_child_todo.period_with_offsets)
-                })
+                .for_each(|(day, day_from_child_todo)| day.extend(day_from_child_todo))
         }
 
         days
@@ -88,11 +86,20 @@ pub fn Calendar(cx: Scope, props: CalendarProps) -> impl IntoView {
             "flex items-stretch
 w-full",
         )
-        .child(Each::new(
-            props.days,
-            |day| day.clone(),
-            Day,
-        ))
+        .child(move || {
+            (0..props.days.get().len())
+                .map(|i| {
+                    Day(
+                        cx,
+                        DayProps {
+                            period_with_offsets: Signal::derive(cx, move || {
+                                props.days.get()[i].clone()
+                            }),
+                        },
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
 }
 
 #[cfg(test)]
@@ -151,12 +158,10 @@ mod tests {
             start_date.naive_utc().date(),
         );
 
-        assert!(days[2..]
-            .iter()
-            .all(|day| day.period_with_offsets.is_empty()));
+        assert!(days[2..].iter().all(|day| day.is_empty()));
 
         assert_eq!(
-            days[0].period_with_offsets,
+            days[0],
             vec![
                 PeriodWithOffset {
                     period: PeriodState::Planned(super::day::length::TimeLength::from(
@@ -172,7 +177,7 @@ mod tests {
         );
 
         assert_eq!(
-            days[1].period_with_offsets,
+            days[1],
             vec![PeriodWithOffset {
                 period: PeriodState::Planned(super::day::length::TimeLength::from(
                     Duration::hours(1) + Duration::minutes(45)

@@ -1,7 +1,7 @@
-use std::ops::Deref;
 use leptos::html::div;
 use leptos::leptos_dom::Each;
 use leptos::*;
+use std::ops::Deref;
 
 use self::length::TimeLength;
 use self::period::{Period, PeriodProps, PeriodState};
@@ -15,9 +15,9 @@ pub struct PeriodWithOffset {
     pub offset: TimeLength,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DayProps {
-    pub period_with_offsets: Vec<PeriodWithOffset>,
+    pub period_with_offsets: Signal<Vec<PeriodWithOffset>>,
 }
 
 #[allow(non_snake_case)]
@@ -33,19 +33,16 @@ flex-grow
             ",
         )
         .child(Each::new(
-            move || props.period_with_offsets.clone(),
-            |period_with_offsets| period_with_offsets.clone(),
-            |cx, item| {
+            props.period_with_offsets,
+            |p| p.clone(),
+            |cx, p| {
                 div(cx)
-                    .prop("style", format!("
-width: 95%;
-position: absolute; top: {}rem", item.offset.deref()))
-                    .child(Period(
-                        cx,
-                        PeriodProps {
-                            period: item.period,
-                        },
-                    ))
+                    .prop(
+                        "style",
+                        format!("position: absolute; top: {}rem", p.offset.deref()),
+                    )
+                    .classes("w-11/12")
+                    .child(Period(cx, PeriodProps { period: p.period }))
             },
         ))
 }
