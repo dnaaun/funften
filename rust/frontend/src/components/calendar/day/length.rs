@@ -7,6 +7,6 @@ pub struct TimeLength(usize);
 
 impl From<Duration> for TimeLength {
     fn from(duration: Duration) -> Self {
-        Self(duration.num_minutes() as usize / 30)
+        Self(duration.num_minutes() as usize / 15)
     }
 }

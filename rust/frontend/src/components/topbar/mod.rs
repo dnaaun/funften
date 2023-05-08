@@ -14,9 +14,16 @@ pub struct TopBarProps {
 }
 
 #[allow(non_snake_case)]
-pub fn TopBar(cx: Scope, TopBarProps { draft_entry, start_day }: TopBarProps) -> HtmlElement<Div> {
+pub fn TopBar(
+    cx: Scope,
+    TopBarProps {
+        draft_entry,
+        start_day,
+    }: TopBarProps,
+) -> HtmlElement<Div> {
     div(cx)
-        .classes("flex justify-between items-center w-full h-14 px-4 border-b border-gray-200")
+        .classes("flex justify-between items-center w-full h-14 px-4 border-b border-gray-200
+bg-white z-10")
         .child(Popover(
             cx,
             include_html!(cx, "../../icons/add.svg").classes(

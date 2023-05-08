@@ -81,25 +81,23 @@ impl CalendarProps {
 
 #[allow(non_snake_case)]
 pub fn Calendar(cx: Scope, props: CalendarProps) -> impl IntoView {
-    div(cx)
-        .classes(
-            "flex items-stretch
-w-full",
-        )
-        .child(move || {
-            (0..props.days.get().len())
-                .map(|i| {
-                    Day(
-                        cx,
-                        DayProps {
-                            period_with_offsets: Signal::derive(cx, move || {
-                                props.days.get()[i].clone()
-                            }),
-                        },
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
+    div(cx).classes("flex items-stretch w-full").child(move || {
+        (0..props.days.get().len())
+            .map(|i| {
+                Day(
+                    cx,
+                    DayProps {
+                        period_with_offsets: Signal::derive(cx, move || {
+                            props.days.get()[i].clone()
+                        }),
+                        day: Signal::derive(cx, move || {
+                            props.start_day.get() + chrono::Duration::days(i as i64)
+                        }),
+                    },
+                )
+            })
+            .collect::<Vec<_>>()
+    })
 }
 
 #[cfg(test)]

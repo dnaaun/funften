@@ -1,6 +1,8 @@
+use chrono::{Duration, NaiveDate};
 use leptos::html::div;
 use leptos::leptos_dom::Each;
 use leptos::*;
+use once_cell::sync::Lazy;
 use std::ops::Deref;
 
 use self::length::TimeLength;
@@ -17,32 +19,50 @@ pub struct PeriodWithOffset {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DayProps {
+    pub day: Signal<NaiveDate>,
     pub period_with_offsets: Signal<Vec<PeriodWithOffset>>,
 }
 
 #[allow(non_snake_case)]
-pub fn Day(cx: Scope, props: DayProps) -> impl IntoView {
+pub fn Day(
+    cx: Scope,
+    DayProps {
+        day,
+        period_with_offsets,
+    }: DayProps,
+) -> impl IntoView {
+    static TWENTY_FOUR_HOURS_LENGTH: Lazy<usize> =
+        Lazy::new(|| *TimeLength::from(Duration::hours(24)).deref());
+
     div(cx)
-        .prop("style", "height: 96em")
-        .classes(
-            "items-stretch
-flex-grow
-            border-l border-gray-200
-            pl-1 pr-2
-            relative
-            ",
+        .classes("items-stretch flex-grow relative")
+        .child(
+            div(cx)
+                .classes("h-20 flex flex-col items-center gap-y-2 mt-2")
+                .child(div(cx).child(move || day.get().format("%a").to_string()))
+                .child(div(cx).child(move || day.get().format("%e").to_string())),
         )
-        .child(Each::new(
-            props.period_with_offsets,
-            |p| p.clone(),
-            |cx, p| {
-                div(cx)
-                    .prop(
-                        "style",
-                        format!("position: absolute; top: {}rem", p.offset.deref()),
-                    )
-                    .classes("w-11/12")
-                    .child(Period(cx, PeriodProps { period: p.period }))
-            },
-        ))
+        .child(
+            div(cx)
+                .prop(
+                    "style",
+                    format!("height: {}rem", TWENTY_FOUR_HOURS_LENGTH.deref()),
+                )
+                .classes("items-stretch flex-grow pr-2 relative border-l border-gray-200")
+                .child(Each::new(
+                    period_with_offsets,
+                    |p| p.clone(),
+                    |cx, p| {
+                        div(cx)
+                            .prop(
+                                "style",
+                                format!(
+                                    "width: 100%; position: absolute; top: {}rem",
+                                    p.offset.deref()
+                                ),
+                            )
+                            .child(Period(cx, PeriodProps { period: p.period }))
+                    },
+                )),
+        )
 }
