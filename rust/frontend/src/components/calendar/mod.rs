@@ -12,21 +12,11 @@ pub mod day;
 
 #[derive(Clone, Debug)]
 pub struct CalendarProps {
-    pub start_day: ReadSignal<NaiveDate>,
-    pub days: Vec<DayProps>,
+    pub start_day: Signal<NaiveDate>,
+    pub days: Signal<Vec<DayProps>>,
 }
 
 impl CalendarProps {
-    pub fn init_from_todo_datas_and_start_date(
-        todo_datas: impl AsRef<Vec<TodoData>>,
-        start_day: ReadSignal<NaiveDate>,
-    ) -> Self {
-        Self {
-            start_day,
-            days: Self::days_prop_from_todo_datas_and_start_date(todo_datas, start_day.get()),
-        }
-    }
-
     pub fn days_prop_from_todo_datas_and_start_date(
         todo_datas: impl AsRef<Vec<TodoData>>,
         start_day: NaiveDate,
@@ -99,7 +89,7 @@ pub fn Calendar(cx: Scope, props: CalendarProps) -> impl IntoView {
 w-full",
         )
         .child(Each::new(
-            move || props.days.clone(),
+            props.days,
             |day| day.clone(),
             Day,
         ))

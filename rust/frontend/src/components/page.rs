@@ -1,16 +1,16 @@
 use chrono::offset::TimeZone;
-use leptos::tracing::info;
 
 use chrono::{Duration, Timelike, Utc};
 use leptos::html::*;
 use leptos::*;
+use leptos::tracing::info;
 use uuid::Uuid;
 use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
 
 use super::calendar::{Calendar, CalendarProps};
 use super::duration::{DurationState, DurationType};
 use super::entry::entry_type::EntryTypeState;
-use super::topbar::TopBar;
+use super::topbar::{TopBar, TopBarProps};
 
 pub struct DraftEntry {
     pub type_: RwSignal<Option<EntryTypeState>>,
@@ -41,53 +41,70 @@ impl DraftEntry {
 pub fn Page(cx: Scope) -> HtmlElement<Div> {
     let test_start_date = Utc.with_ymd_and_hms(2023, 5, 1, 8, 0, 0).unwrap();
 
-    let todos = vec![TodoData {
-        id: Uuid::new_v4(),
-        text: "My only TODO".into(),
-        completed: false,
-        created_at: test_start_date,
-        estimated_duration: Duration::hours(10),
-        planned_executions: vec![PlannedExecutionData {
-            id: Uuid::new_v4(),
-            start: test_start_date.with_hour(10).unwrap(),
-            end: test_start_date
-                .with_hour(10)
-                .unwrap()
-                .with_minute(45)
-                .unwrap(),
-        }],
-        actual_executions: vec![ActualExecutionData {
-            id: Uuid::new_v4(),
-            start: test_start_date.with_minute(5).unwrap(),
-            end: Some(
-                test_start_date
-                    .with_hour(9)
-                    .unwrap()
-                    .with_minute(55)
-                    .unwrap(),
-            ),
-        }],
-        child_todos: Box::new(vec![]),
-    }];
-
     let draft_entry = DraftEntry::new(cx);
     let start_day = create_rw_signal(cx, test_start_date.naive_utc().date());
-    let (calendar_props, _) = create_signal(
+    let todos = create_rw_signal(
         cx,
-        CalendarProps::init_from_todo_datas_and_start_date(todos, start_day.read_only()),
+        vec![TodoData {
+            id: Uuid::new_v4(),
+            text: "My only TODO".into(),
+            completed: false,
+            created_at: test_start_date,
+            estimated_duration: Duration::hours(10),
+            planned_executions: vec![PlannedExecutionData {
+                id: Uuid::new_v4(),
+                start: test_start_date.with_hour(10).unwrap(),
+                end: test_start_date
+                    .with_hour(10)
+                    .unwrap()
+                    .with_minute(45)
+                    .unwrap(),
+            }],
+            actual_executions: vec![ActualExecutionData {
+                id: Uuid::new_v4(),
+                start: test_start_date.with_minute(5).unwrap(),
+                end: Some(
+                    test_start_date
+                        .with_hour(9)
+                        .unwrap()
+                        .with_minute(55)
+                        .unwrap(),
+                ),
+            }],
+            child_todos: Box::new(vec![]),
+        }],
     );
+    let cur_seven_days = Signal::derive(cx, move || {
+        CalendarProps::days_prop_from_todo_datas_and_start_date(todos.get(), start_day.get())
+    });
 
     create_effect(cx, move |_| {
+        info!("cur_seven_days_len: {:?}", cur_seven_days.get().len());
+    });
+
+    // Auto-fill the start and end datetime fields with the start date corresponding to the day
+    // that starts the visible calendar.
+    create_effect(cx, move |_| {
         let start_date_formatted = start_day.get().format("%Y-%m-%dT08:00").to_string();
-
         draft_entry.start_datetime.set(start_date_formatted.clone());
-
         draft_entry
             .end_datetime
             .set(start_date_formatted.replace("08:00", "08:45"));
     });
 
     div(cx)
-        .child(TopBar(cx, draft_entry))
-        .child(Calendar(cx, calendar_props.get()))
+        .child(TopBar(
+            cx,
+            TopBarProps {
+                draft_entry,
+                start_day,
+            },
+        ))
+        .child(Calendar(
+            cx,
+            CalendarProps {
+                days: cur_seven_days,
+                start_day: start_day.into(),
+            },
+        ))
 }
