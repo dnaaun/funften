@@ -48,7 +48,7 @@ pub fn Day(
                     "style",
                     format!("height: {}rem", TWENTY_FOUR_HOURS_LENGTH.deref()),
                 )
-                .classes("items-stretch flex-grow pr-2 relative border-l border-gray-200")
+                .classes("items-stretch flex-grow relative border-l border-gray-200")
                 .child(Each::new(
                     period_with_offsets,
                     |p| p.clone(),
@@ -57,7 +57,7 @@ pub fn Day(
                             .prop(
                                 "style",
                                 format!(
-                                    "width: 100%; position: absolute; top: {}rem",
+                                    "width: 95%; position: absolute; top: {}rem",
                                     p.offset.deref()
                                 ),
                             )
