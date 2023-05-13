@@ -1,11 +1,18 @@
+use once_cell::sync::Lazy;
+use std::cell::RefCell;
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+use yrs::Transact;
+
 use chrono::offset::TimeZone;
 
 use chrono::{Duration, Timelike, Utc};
 use leptos::html::*;
-use leptos::tracing::info;
 use leptos::*;
 use uuid::Uuid;
-use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
+use wire::state::{
+    ActualExecutionData, PlannedExecutionData, State, TodoData, TransactionMutContext,
+};
 
 use super::calendar::{Calendar, CalendarProps};
 use super::duration::{DurationState, DurationType};
@@ -37,14 +44,24 @@ impl DraftEntry {
     }
 }
 
+static DOC: Lazy<yrs::Doc> = Lazy::new(|| yrs::Doc::new());
+
 #[allow(non_snake_case)]
 pub fn Page(cx: Scope) -> HtmlElement<Div> {
     let test_start_date = Utc.with_ymd_and_hms(2023, 5, 1, 8, 0, 0).unwrap();
 
     let draft_entry = DraftEntry::new(cx);
     let start_day = create_rw_signal(cx, test_start_date.naive_utc().date());
-    let todos = create_rw_signal(
-        cx,
+
+    let map = DOC.get_or_insert_map("state");
+    // Rc<RefCell<>> to make TransactMut Clone, so that I can leptos::provide_context it.
+    let rc_refcell_txn: TransactionMutContext = Rc::new(RefCell::new(DOC.deref().transact_mut()));
+    leptos::provide_context(cx, rc_refcell_txn.clone());
+
+    let txn = leptos::use_context::<TransactionMutContext>(cx).unwrap();
+    let state = State::new(
+        map,
+        &mut txn.borrow_mut(),
         vec![TodoData {
             id: Uuid::new_v4(),
             text: "My only TODO".into(),
@@ -74,8 +91,14 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
             child_todos: Box::new(vec![]),
         }],
     );
+
     let cur_seven_days = Signal::derive(cx, move || {
-        CalendarProps::days_prop_from_todo_datas_and_start_date(todos.get(), start_day.get())
+        let todos = state.todos(txn.borrow_mut().deref_mut());
+        CalendarProps::days_prop_from_todo_datas_and_start_date(
+            todos,
+            txn.borrow_mut().deref_mut(),
+            start_day.get(),
+        )
     });
 
     // Auto-fill the start and end datetime fields with the start date corresponding to the day

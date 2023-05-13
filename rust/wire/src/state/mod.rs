@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
 /// The convention here is `maybe_*` methods do "validations" and return `None` if validation fails.
 use uuid::Uuid;
 use yrs::{
@@ -387,6 +387,9 @@ impl Todo {
     }
 }
 
+pub type TransactionMutContext = Rc<RefCell<TransactionMut<'static>>>;
+
+#[derive(Clone)]
 pub struct State(MapRef);
 
 impl State {

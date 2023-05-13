@@ -2,12 +2,13 @@ use std::iter::repeat;
 
 use crate::components::calendar::day::Day;
 use chrono::{DateTime, NaiveDate, Utc};
-use leptos::tracing::info;
 use leptos::*;
 use leptos_dom::html::div;
-use wire::state::TodoData;
+use wire::state::{State, Todo};
+use yrs::TransactionMut;
 
 use self::day::{length::TimeLength, period::PeriodState, DayProps, PeriodWithOffset};
+
 pub mod day;
 
 #[derive(Clone, Debug)]
@@ -18,7 +19,8 @@ pub struct CalendarProps {
 
 impl CalendarProps {
     pub fn days_prop_from_todo_datas_and_start_date(
-        todo_datas: impl AsRef<Vec<TodoData>>,
+        todos: Vec<Todo>,
+        txn: &TransactionMut,
         start_day: NaiveDate,
     ) -> Vec<Vec<PeriodWithOffset>> {
         let mut days: Vec<Vec<PeriodWithOffset>> = repeat(Vec::new()).take(7).collect();
@@ -33,42 +35,48 @@ impl CalendarProps {
                 .unwrap()
         };
 
-        for todo_data in todo_datas.as_ref() {
-            todo_data
-                .planned_executions
+        for todo in todos.iter() {
+            todo
+                .planned_executions(txn)
                 .iter()
-                .filter(|e| within_week(e.start.naive_utc().date()))
+                .filter(|e| within_week(e.start(txn).naive_utc().date()))
                 .for_each(|ae| {
-                    let day_index = (ae.start.naive_utc().date() - start_day).num_days() as usize;
+                    let day_index =
+                        (ae.start(txn).naive_utc().date() - start_day).num_days() as usize;
                     days[day_index].push({
                         PeriodWithOffset {
-                            period: PeriodState::Planned(TimeLength::from(ae.end - ae.start)),
-                            offset: TimeLength::from(ae.start - midnight_before(ae.start)),
+                            period: PeriodState::Planned(TimeLength::from(
+                                ae.end(txn) - ae.start(txn),
+                            )),
+                            offset: TimeLength::from(
+                                ae.start(txn) - midnight_before(ae.start(txn)),
+                            ),
                         }
                     })
                 });
 
-            todo_data
-                .actual_executions
+            todo
+                .actual_executions(txn)
                 .iter()
-                .filter(|e| within_week(e.start.naive_utc().date()))
+                .filter(|e| within_week(e.start(txn).naive_utc().date()))
                 .for_each(|ae| {
-                    let day_index = (ae.start.naive_utc().date() - start_day).num_days() as usize;
+                    let start = ae.start(txn);
+                    let day_index = (start.naive_utc().date() - start_day).num_days() as usize;
 
-                    let period = match ae.end {
-                        Some(end) => PeriodState::Actual(TimeLength::from(end - ae.start)),
+                    let period = match ae.end(txn) {
+                        Some(end) => PeriodState::Actual(TimeLength::from(end - start)),
                         None => PeriodState::ActualUnbonded,
                     };
                     days[day_index].push({
                         PeriodWithOffset {
                             period,
-                            offset: TimeLength::from(ae.start - midnight_before(ae.start)),
+                            offset: TimeLength::from(start - midnight_before(start)),
                         }
                     })
                 });
 
             let days_from_child_todos =
-                Self::days_prop_from_todo_datas_and_start_date(&todo_data.child_todos, start_day);
+                Self::days_prop_from_todo_datas_and_start_date(todo.child_todos(txn), txn, start_day);
 
             days.iter_mut()
                 .zip(days_from_child_todos)
@@ -106,7 +114,9 @@ mod tests {
     use chrono::Timelike;
     use chrono::{Duration, Utc};
     use uuid::Uuid;
+    use wire::state::State;
     use wire::state::{ActualExecutionData, PlannedExecutionData, TodoData};
+    use yrs::Transact;
 
     use crate::components::calendar::day::length::TimeLength;
     use crate::components::calendar::day::period::PeriodState;
@@ -151,8 +161,14 @@ mod tests {
             }]),
         }];
 
+        let doc = yrs::Doc::new();
+        let map = doc.get_or_insert_map("map");
+        let mut txn = doc.transact_mut();
+        let state = State::new(map, &mut txn, todos);
+
         let days = CalendarProps::days_prop_from_todo_datas_and_start_date(
-            todos,
+            state.todos(&mut txn)(txn),
+            &mut txn,
             start_date.naive_utc().date(),
         );
 
