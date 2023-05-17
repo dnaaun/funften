@@ -2,5 +2,8 @@
 members = [
 "frontend",
 "backend",
-"wire"
+"wire",
+"leptos_yrs",
+"yrs_wrappers",
+"yrs_struct_derive"
 ]
