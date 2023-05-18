@@ -1,10 +1,18 @@
+pub mod persist;
+// pub mod app_state;
+
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use axum::{http::HeaderValue, Router};
+use axum::{http::HeaderValue, routing::post, Router};
 use tracing::debug;
+
+#[axum::debug_handler]
+async fn root_rpc_endpoint() -> &'static str {
+    "Hello, World!"
+}
 
 #[tokio::main]
 async fn main() {
@@ -19,11 +27,11 @@ async fn main() {
         .allow_headers(tower_http::cors::Any)
         .allow_origin("http://localhost:1001".parse::<HeaderValue>().unwrap());
 
-    let trace_layer = TraceLayer::new_for_http();
-
-    let router = Router::new().nest_service("/assets", ServeDir::new("../frontend/assets"));
-
-    let router = router.layer(cors_layer).layer(trace_layer);
+    let router = Router::new()
+        .route("/rpc", post(root_rpc_endpoint))
+        .nest_service("/assets", ServeDir::new("../frontend/assets"))
+        .layer(cors_layer)
+        .layer(TraceLayer::new_for_http());
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
