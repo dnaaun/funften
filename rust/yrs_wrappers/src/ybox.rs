@@ -1,14 +1,14 @@
 use crate::{try_from_yrs_value::TryFromYrsValue, yrs_wrapper_error::YrsResult};
 use yrs::block::{BlockPtr, Prelim};
 
-#[derive(derive_more::From)]
+#[derive(derive_more::From, derive_more::Deref)]
 pub struct YBox<T>(Box<T>);
 
 impl<T> TryFromYrsValue for YBox<T>
 where
     T: TryFromYrsValue,
 {
-    fn try_from_yrs_value(value: yrs::types::Value, txn: &yrs::Transaction) -> YrsResult<Self> {
+    fn try_from_yrs_value(value: yrs::types::Value, txn: &impl yrs::ReadTxn) -> YrsResult<Self> {
         Ok(YBox(Box::new(T::try_from_yrs_value(value, txn)?)))
     }
 }
@@ -48,3 +48,4 @@ impl<T> YBox<T> {
         Self(Box::new(inner))
     }
 }
+

@@ -1,4 +1,4 @@
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum YrsWrapperError {
     #[error("Unexpected Yrs value: expected {expected}")]
     UnexpectedYrsValue { expected: &'static str },

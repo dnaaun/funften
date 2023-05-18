@@ -27,7 +27,7 @@ impl yrs::block::Prelim for YBoolPrelim {
 }
 
 impl TryFromYrsValue for YBool {
-    fn try_from_yrs_value(value: yrs::types::Value, _txn: &yrs::Transaction) -> YrsResult<Self> {
+    fn try_from_yrs_value(value: yrs::types::Value, _txn: &impl yrs::ReadTxn) -> YrsResult<Self> {
         value.unwrap_yrs_any()?.unwrap_any_bool().map(YBool)
     }
 }
@@ -68,7 +68,7 @@ impl yrs::block::Prelim for YDateTimePrelim {
 }
 
 impl TryFromYrsValue for YDateTime {
-    fn try_from_yrs_value(value: yrs::types::Value, _txn: &yrs::Transaction) -> YrsResult<Self> {
+    fn try_from_yrs_value(value: yrs::types::Value, _txn: &impl yrs::ReadTxn) -> YrsResult<Self> {
         let millis = value.unwrap_yrs_any()?.unwrap_any_bigint()?;
         Ok(YDateTime(
             NaiveDateTime::from_timestamp_millis(millis)
@@ -118,7 +118,7 @@ impl yrs::block::Prelim for YDurationPrelim {
 }
 
 impl TryFromYrsValue for YDuration {
-    fn try_from_yrs_value(value: yrs::types::Value, _txn: &yrs::Transaction) -> YrsResult<Self> {
+    fn try_from_yrs_value(value: yrs::types::Value, _txn: &impl yrs::ReadTxn) -> YrsResult<Self> {
         let millis = value.unwrap_yrs_any()?.unwrap_any_bigint()?;
         Ok(YDuration(chrono::Duration::milliseconds(millis)))
     }

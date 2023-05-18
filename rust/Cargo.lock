@@ -658,6 +658,7 @@ dependencies = [
  "web-sys",
  "wire",
  "yrs",
+ "yrs_wrappers",
 ]
 
 [[package]]
@@ -1245,15 +1246,6 @@ dependencies = [
  "serde",
  "server_fn",
  "thiserror",
-]
-
-[[package]]
-name = "leptos_yrs"
-version = "0.1.0"
-dependencies = [
- "leptos",
- "thiserror",
- "yrs",
 ]
 
 [[package]]

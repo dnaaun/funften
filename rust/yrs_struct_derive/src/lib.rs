@@ -116,7 +116,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
             #[allow(unused_variables)]
             fn try_from_yrs_value(
                 value: yrs::types::Value,
-                txn: &yrs::Transaction,
+                txn: &impl yrs::ReadTxn,
             ) -> yrs_wrappers::yrs_wrapper_error::YrsResult<Self> {
                 let map_ref = <yrs::types::Value as yrs_wrappers::yrs_wrapper_error::UnwrapYrsValue>::unwrap_yrs_map(value)?;
 
@@ -232,7 +232,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
             quote! {
                 pub fn #name(
                     &self,
-                    txn: &yrs::Transaction,
+                    txn: &impl yrs::ReadTxn,
                 ) -> #return_type {
                     #[allow(non_camel_case_types)]
                     type #field_name_is_prelim_for = <#ty as yrs::block::Prelim>::Return;

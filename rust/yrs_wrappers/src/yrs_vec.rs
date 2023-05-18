@@ -14,7 +14,7 @@ impl<T> TryFromYrsValue for YrsVec<T>
 where
     T: TryFromYrsValue,
 {
-    fn try_from_yrs_value(value: yrs::types::Value, txn: &yrs::Transaction) -> YrsResult<Self> {
+    fn try_from_yrs_value(value: yrs::types::Value, txn: &impl yrs::ReadTxn) -> YrsResult<Self> {
         let array_ref = value.unwrap_yrs_array()?;
 
         // Verify that the array contains deserializable values.
@@ -83,7 +83,7 @@ impl<T> YrsVec<T>
 where
     T: TryFromYrsValue,
 {
-    pub fn iter<'a>(&'a self, txn: &'a yrs::Transaction) -> impl Iterator<Item = T> + 'a {
+    pub fn iter<'a>(&'a self, txn: &'a impl yrs::ReadTxn) -> impl Iterator<Item = T> + 'a {
         self.inner.iter(txn).map(move |value| {
             T::try_from_yrs_value(value, txn)
                 .expect("YrsVec contains values that are not deserializable into T")

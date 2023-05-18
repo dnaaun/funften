@@ -3,30 +3,29 @@ pub mod example;
 use yrs::TextPrelim;
 use yrs_wrappers::{
     ybox::YBox,
-    yrs_basic_types::{YDateTime, YDuration, YUuid},
+    yrs_basic_types::{YBoolPrelim, YDateTimePrelim, YDurationPrelim},
     yrs_struct::YrsStruct,
     yrs_vec::YrsVecPrelim,
 };
 
 #[derive(YrsStruct)]
 pub struct PlannedExecutionPrelim {
-    pub start: YDateTime,
-    pub end: YDateTime,
+    pub start: YDateTimePrelim,
+    pub end: YDateTimePrelim,
 }
 
 #[derive(YrsStruct)]
 pub struct ActualExecutionPrelim {
-    pub start: YDateTime,
-    pub end: Option<YDateTime>,
+    pub start: YDateTimePrelim,
+    pub end: Option<YDateTimePrelim>,
 }
 
 #[derive(YrsStruct)]
 pub struct TodoPrelim {
-    pub id: YUuid,
     pub text: TextPrelim<String>,
-    pub completed: bool,
-    pub created_at: YDateTime,
-    pub estimated_duration: YDuration,
+    pub completed: YBoolPrelim,
+    pub created_at: YDateTimePrelim,
+    pub estimated_duration: YDurationPrelim,
     pub planned_executions: YrsVecPrelim<PlannedExecutionPrelim>,
     pub actual_executions: YrsVecPrelim<ActualExecutionPrelim>,
     pub child_todos: YBox<YrsVecPrelim<TodoPrelim>>,
@@ -39,13 +38,14 @@ pub struct StatePrelim {
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
+    use std::ops::Deref;
     use yrs::Doc;
     use yrs::GetString;
     use yrs::Map;
     use yrs::TextPrelim;
     use yrs::Transact;
     use yrs_wrappers::ybox::YBox;
+    use yrs_wrappers::yrs_wrapper_error::YrsResult;
 
     use super::ActualExecutionPrelim;
     use super::PlannedExecutionPrelim;
@@ -53,21 +53,21 @@ mod tests {
     use super::TodoPrelim;
 
     #[test]
-    fn test_new_state() {
+    fn test_new_state() -> YrsResult<()> {
+        let start = chrono::Utc::now().naive_utc();
         let state_prelim = StatePrelim {
             todos: vec![TodoPrelim {
-                id: Uuid::new_v4().into(),
                 text: TextPrelim::new("yo".into()),
-                completed: false,
+                completed: false.into(),
                 created_at: chrono::Utc::now().naive_utc().into(),
                 estimated_duration: chrono::Duration::seconds(60).into(),
                 planned_executions: vec![PlannedExecutionPrelim {
-                    start: chrono::Utc::now().naive_utc().into(),
+                    start: start.into(),
                     end: chrono::Utc::now().naive_utc().into(),
                 }]
                 .into(),
                 actual_executions: vec![ActualExecutionPrelim {
-                    start: chrono::Utc::now().naive_utc().into(),
+                    start: start.into(),
                     end: None,
                 }]
                 .into(),
@@ -84,14 +84,31 @@ mod tests {
 
         drop(txn);
         let txn = doc.transact();
-        let todo_first_text = state
-            .todos(&txn)
-            .unwrap()
-            .get(&txn, 0)
-            .unwrap()
-            .unwrap()
-            .text(&txn)
-            .unwrap();
+
+        let first_todo = state.todos(&txn)?.get(&txn, 0)?.unwrap();
+
+        let todo_first_text = first_todo.text(&txn)?;
         assert_eq!(todo_first_text.get_string(&txn), "yo");
+
+        let first_todo_completed = first_todo.completed(&txn)?;
+        assert_eq!(first_todo_completed.deref(), &false);
+
+        assert_eq!(
+            first_todo.estimated_duration(&txn)?.deref(),
+            &chrono::Duration::seconds(60)
+        );
+
+        assert_eq!(
+            first_todo
+                .planned_executions(&txn)?
+                .get(&txn, 0)?
+                .unwrap()
+                .start(&txn)?
+                .format("%Y-%m-%dT%H:%M:%S%.fZ")
+                .to_string(),
+            start.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string()
+        );
+
+        Ok(())
     }
 }
