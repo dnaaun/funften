@@ -61,7 +61,7 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
         .unwrap()
         .naive_utc();
 
-    let draft_entry = DraftEntry::new(cx);
+    let entry = DraftEntry::new(cx);
     let start_day = create_rw_signal(cx, test_start_date.date());
 
     let root = DOC.get_or_insert_map("root");
@@ -104,7 +104,7 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
     };
 
     let state = root.insert(&mut txn.borrow_mut(), "state", state);
-    let cur_seven_days = Signal::derive(cx, move || {
+    let seven_days = Signal::derive(cx, move || {
         let todos = state.todos(txn.borrow().deref());
         Calendar::days_prop_from_todo_datas_and_start_date(
             &todos?,
@@ -117,25 +117,14 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
     // that starts the visible calendar.
     create_effect(cx, move |_| {
         let start_date_formatted = start_day.get().format("%Y-%m-%dT08:00").to_string();
-        draft_entry.start_datetime.set(start_date_formatted.clone());
-        draft_entry
+        entry.start_datetime.set(start_date_formatted.clone());
+        entry
             .end_datetime
             .set(start_date_formatted.replace("08:00", "08:45"));
     });
 
-    Ok(div(cx)
-        .child(
-            TopBar {
-                draft_entry,
-                start_day,
-            }
-            .view(cx),
-        )
-        .child(
-            Calendar {
-                days: cur_seven_days,
-                start_day: start_day.into(),
-            }
-            .view(cx),
-        ))
+    Ok(div(cx).child(TopBar { entry, start_day }).child(Calendar {
+        seven_days,
+        start_day: start_day.into(),
+    }))
 }

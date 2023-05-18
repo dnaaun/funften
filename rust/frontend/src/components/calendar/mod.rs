@@ -15,7 +15,7 @@ pub mod day;
 #[derive(Clone, Debug)]
 pub struct Calendar {
     pub start_day: Signal<NaiveDate>,
-    pub days: Signal<YrsResult<Vec<Vec<PeriodWithOffset>>>>,
+    pub seven_days: Signal<YrsResult<Vec<Vec<PeriodWithOffset>>>>,
 }
 
 impl Calendar {
@@ -108,13 +108,13 @@ impl Calendar {
     pub fn view(self, cx: Scope) -> GuiResult<impl IntoView> {
         Ok(div(cx).classes("flex items-stretch w-full").child(move || {
             GuiResult::<_>::Ok(
-                (0..self.days.get()?.len())
+                (0..self.seven_days.get()?.len())
                     .map(|i| {
                         Day(
                             cx,
                             DayProps {
                                 period_with_offsets: Signal::derive(cx, move || {
-                                    self.days.get().map(|d| d[i].clone())
+                                    self.seven_days.get().map(|d| d[i].clone())
                                 }),
                                 day: Signal::derive(cx, move || {
                                     self.start_day.get() + chrono::Duration::days(i as i64)
@@ -227,5 +227,11 @@ mod tests {
         );
 
         Ok(())
+    }
+}
+
+impl IntoView for Calendar {
+    fn into_view(self, cx: Scope) -> View {
+        self.view(cx).unwrap().into_view(cx)
     }
 }
