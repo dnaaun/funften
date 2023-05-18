@@ -1,64 +1,32 @@
+use crate::yrs_wrapper_error::UnwrapYrsValue;
+use crate::yrs_wrapper_error::YrsResult;
+use yrs::Array;
+
 use super::try_from_yrs_value::TryFromYrsValue;
-use yrs::{block::Prelim, Array, ArrayPrelim, ReadTxn, Transaction, TransactionMut};
+use yrs::{block::Prelim, ArrayPrelim, ReadTxn, Transaction, TransactionMut};
 
 pub struct YrsVec<T> {
     inner: yrs::ArrayRef,
     phantom: std::marker::PhantomData<T>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum YrsVecDeserializeError<E> {
-    #[error("Member at index {idx} failed to deserialize with error: {err}")]
-    ElementDeserializeError {
-        idx: usize,
-
-        #[source]
-        err: E,
-
-        #[backtrace]
-        backtrace: std::backtrace::Backtrace,
-    },
-
-    #[error("expected YArray")]
-    ExpectedYArray,
-}
-
 impl<T> TryFromYrsValue for YrsVec<T>
 where
     T: TryFromYrsValue,
 {
-    type Error = YrsVecDeserializeError<T::Error>;
+    fn try_from_yrs_value(value: yrs::types::Value, txn: &yrs::Transaction) -> YrsResult<Self> {
+        let array_ref = value.unwrap_yrs_array()?;
 
-    fn try_from_yrs_value(
-        value: yrs::types::Value,
-        txn: &yrs::Transaction,
-    ) -> Result<Self, Self::Error> {
-        match value {
-            yrs::types::Value::YArray(array_ref) => {
-                // Verify that the array contains deserializable values.
-                array_ref
-                    .iter(txn)
-                    .enumerate()
-                    .map(|(idx, value)| {
-                        T::try_from_yrs_value(value, txn).map_err(|e| (idx, e))?;
-                        Ok(())
-                    })
-                    .collect::<Result<(), (usize, T::Error)>>()
-                    .map_err(
-                        |(idx, err)| YrsVecDeserializeError::ElementDeserializeError {
-                            idx,
-                            err,
-                            backtrace: std::backtrace::Backtrace::capture(),
-                        },
-                    )?;
+        // Verify that the array contains deserializable values.
+        array_ref
+            .iter(txn)
+            .map(|v| T::try_from_yrs_value(v, txn).map(|_| ()))
+            .collect::<Result<(), _>>()?;
 
-                Ok(YrsVec {
-                    inner: array_ref,
-                    phantom: std::marker::PhantomData,
-                })
-            }
-            _ => Err(YrsVecDeserializeError::ExpectedYArray),
-        }
+        Ok(YrsVec {
+            inner: array_ref,
+            phantom: std::marker::PhantomData,
+        })
     }
 }
 
@@ -139,7 +107,7 @@ where
         self.inner.insert(txn, index, value)
     }
 
-    pub fn get(&self, txn: &Transaction, index: u32) -> Result<Option<T>, T::Error> {
+    pub fn get(&self, txn: &Transaction, index: u32) -> YrsResult<Option<T>> {
         self.inner
             .get(txn, index)
             .map(|value| T::try_from_yrs_value(value, txn))

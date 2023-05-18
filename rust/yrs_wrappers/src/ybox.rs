@@ -1,4 +1,4 @@
-use crate::try_from_yrs_value::TryFromYrsValue;
+use crate::{try_from_yrs_value::TryFromYrsValue, yrs_wrapper_error::YrsResult};
 use yrs::block::{BlockPtr, Prelim};
 
 #[derive(derive_more::From)]
@@ -8,12 +8,7 @@ impl<T> TryFromYrsValue for YBox<T>
 where
     T: TryFromYrsValue,
 {
-    type Error = T::Error;
-
-    fn try_from_yrs_value(
-        value: yrs::types::Value,
-        txn: &yrs::Transaction,
-    ) -> Result<Self, Self::Error> {
+    fn try_from_yrs_value(value: yrs::types::Value, txn: &yrs::Transaction) -> YrsResult<Self> {
         Ok(YBox(Box::new(T::try_from_yrs_value(value, txn)?)))
     }
 }
