@@ -17,14 +17,14 @@ use leptos::html::*;
 use leptos::*;
 use wire::state::{ActualExecutionPrelim, PlannedExecutionPrelim, TodoPrelim};
 
-use crate::gui_error::GuiError;
 use crate::gui_error::GuiResult;
 
-use super::calendar::{Calendar, CalendarProps};
+use super::calendar::Calendar;
 use super::duration::{DurationState, DurationType};
 use super::entry::entry_type::EntryTypeState;
-use super::topbar::{TopBar, TopBarProps};
+use super::topbar::TopBar;
 
+#[derive(Clone)]
 pub struct DraftEntry {
     pub type_: RwSignal<Option<EntryTypeState>>,
     pub text: RwSignal<String>,
@@ -106,7 +106,7 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
     let state = root.insert(&mut txn.borrow_mut(), "state", state);
     let cur_seven_days = Signal::derive(cx, move || {
         let todos = state.todos(txn.borrow().deref());
-        CalendarProps::days_prop_from_todo_datas_and_start_date(
+        Calendar::days_prop_from_todo_datas_and_start_date(
             &todos?,
             txn.borrow_mut().deref_mut(),
             start_day.get(),
@@ -124,18 +124,18 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
     });
 
     Ok(div(cx)
-        .child(TopBar(
-            cx,
-            TopBarProps {
+        .child(
+            TopBar {
                 draft_entry,
                 start_day,
-            },
-        ))
-        .child(Calendar(
-            cx,
-            CalendarProps {
+            }
+            .view(cx),
+        )
+        .child(
+            Calendar {
                 days: cur_seven_days,
                 start_day: start_day.into(),
-            },
-        )))
+            }
+            .view(cx),
+        ))
 }

@@ -15,5 +15,5 @@ pub fn SelectButton<V: IntoView + std::clone::Clone>(
             .child(include_html!(cx, "../../icons/chevron-down.svg").classes("w-4 h-4"));
     // });
 
-    Button(cx, btn_child.into())
+    Button(cx).child(btn_child)
 }

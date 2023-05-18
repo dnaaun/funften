@@ -8,20 +8,18 @@ use super::navigate::{Navigate, NavigateProps};
 use super::page::DraftEntry;
 use super::popover::Popover;
 
-pub struct TopBarProps {
+pub struct TopBar {
     pub draft_entry: DraftEntry,
     pub start_day: RwSignal<chrono::NaiveDate>,
 }
 
-#[allow(non_snake_case)]
-pub fn TopBar(
-    cx: Scope,
-    TopBarProps {
-        draft_entry,
-        start_day,
-    }: TopBarProps,
-) -> HtmlElement<Div> {
-    div(cx)
+impl TopBar {
+    pub fn view(self, cx: Scope) -> impl IntoView {
+        let TopBar {
+            draft_entry,
+            start_day,
+        } = self;
+        div(cx)
         .classes("flex justify-between items-center w-full h-14 px-4 border-b border-gray-200
 bg-white z-10")
         .child(Popover(
@@ -36,4 +34,5 @@ bg-white z-10")
                 start_day,
             })
         )
+    }
 }

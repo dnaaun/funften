@@ -10,17 +10,15 @@ use yrs_wrappers::{yrs_vec::YrsVec, yrs_wrapper_error::YrsResult};
 
 use self::day::{length::TimeLength, period::PeriodState, DayProps, PeriodWithOffset};
 
-use super::page::TransactionMutContext;
-
 pub mod day;
 
 #[derive(Clone, Debug)]
-pub struct CalendarProps {
+pub struct Calendar {
     pub start_day: Signal<NaiveDate>,
     pub days: Signal<YrsResult<Vec<Vec<PeriodWithOffset>>>>,
 }
 
-impl CalendarProps {
+impl Calendar {
     pub fn days_prop_from_todo_datas_and_start_date(
         todos: &YrsVec<Todo>,
         txn: &impl yrs::ReadTxn,
@@ -106,92 +104,99 @@ impl CalendarProps {
 
         Ok(days)
     }
-}
 
-#[allow(non_snake_case)]
-pub fn Calendar(cx: Scope, props: CalendarProps) -> GuiResult<impl IntoView> {
-    Ok(div(cx).classes("flex items-stretch w-full").child(move || {
-        GuiResult::<_>::Ok(
-            (0..props.days.get()?.len())
-                .map(|i| {
-                    Day(
-                        cx,
-                        DayProps {
-                            period_with_offsets: Signal::derive(cx, move || {
-                                props.days.get().map(|d| d[i].clone())
-                            }),
-                            day: Signal::derive(cx, move || {
-                                props.start_day.get() + chrono::Duration::days(i as i64)
-                            }),
-                        },
-                    )
-                })
-                .collect::<Vec<_>>(),
-        )
-    }))
+    pub fn view(self, cx: Scope) -> GuiResult<impl IntoView> {
+        Ok(div(cx).classes("flex items-stretch w-full").child(move || {
+            GuiResult::<_>::Ok(
+                (0..self.days.get()?.len())
+                    .map(|i| {
+                        Day(
+                            cx,
+                            DayProps {
+                                period_with_offsets: Signal::derive(cx, move || {
+                                    self.days.get().map(|d| d[i].clone())
+                                }),
+                                day: Signal::derive(cx, move || {
+                                    self.start_day.get() + chrono::Duration::days(i as i64)
+                                }),
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        }))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
-    use chrono::Timelike;
-    use chrono::{Duration, Utc};
-    use uuid::Uuid;
-    use wire::state::State;
-    use wire::state::{ActualExecutionPrelim, TodoData};
-    use yrs::Transact;
+    use chrono::{Duration, TimeZone, Timelike, Utc};
+    use wire::state::{ActualExecutionPrelim, PlannedExecutionPrelim, StatePrelim, TodoPrelim};
+    use yrs::{Map, TextPrelim, Transact};
+    use yrs_wrappers::{ybox::YBox, yrs_wrapper_error::YrsResult};
 
-    use crate::components::calendar::day::length::TimeLength;
-    use crate::components::calendar::day::period::PeriodState;
-    use crate::components::calendar::day::PeriodWithOffset;
+    use crate::components::calendar::day::{
+        length::TimeLength, period::PeriodState, PeriodWithOffset,
+    };
 
-    use super::CalendarProps;
+    use super::Calendar;
 
     #[test]
-    fn test_calendar_init_from_todo_datas() {
+    fn test_calendar_init_from_todo_datas() -> YrsResult<()> {
         let start_date = Utc.with_ymd_and_hms(2023, 5, 1, 8, 0, 0).unwrap();
 
-        let todos = vec![TodoData {
-            id: Uuid::new_v4(),
-            text: "My only TODO".into(),
-            completed: false,
-            created_at: start_date,
-            estimated_duration: Duration::hours(10),
-            planned_executions: vec![PlannedExecutionData {
-                start: start_date,
-                end: (|| start_date.with_hour(9)?.with_minute(45))().unwrap(),
-            }],
-            actual_executions: vec![ActualExecutionPrelim {
-                id: Uuid::new_v4(),
-                start: start_date.with_minute(5).unwrap(),
-                end: None,
-            }],
-            child_todos: Box::new(vec![TodoData {
-                id: Uuid::new_v4(),
-                text: "My child todo".into(),
-                completed: false,
-                created_at: start_date + Duration::days(1),
-                estimated_duration: Duration::hours(7),
-                planned_executions: vec![PlannedExecutionData {
-                    start: start_date + Duration::days(1),
-                    end: (|| start_date.with_hour(9)?.with_minute(45))().unwrap()
-                        + Duration::days(1),
-                }],
-                actual_executions: vec![],
-                child_todos: Box::new(vec![]),
-            }]),
-        }];
+        let state_prelim = StatePrelim {
+            todos: vec![TodoPrelim {
+                text: TextPrelim::new("My only TODO".into()),
+                completed: false.into(),
+                created_at: start_date.naive_utc().into(),
+                estimated_duration: Duration::hours(10).into(),
+                planned_executions: vec![PlannedExecutionPrelim {
+                    start: start_date.naive_utc().into(),
+                    end: (|| start_date.with_hour(9)?.with_minute(45))()
+                        .unwrap()
+                        .naive_utc()
+                        .into(),
+                }]
+                .into(),
+                actual_executions: vec![ActualExecutionPrelim {
+                    start: start_date.with_minute(5).unwrap().naive_utc().into(),
+                    end: None,
+                }]
+                .into(),
+                child_todos: YBox::new(
+                    vec![TodoPrelim {
+                        text: TextPrelim::new("My child TODO".into()),
+                        completed: false.into(),
+                        created_at: (start_date + Duration::days(1)).naive_utc().into(),
+                        estimated_duration: Duration::hours(7).into(),
+                        planned_executions: vec![PlannedExecutionPrelim {
+                            start: (start_date + Duration::days(1)).naive_utc().into(),
+                            end: ((|| start_date.with_hour(9)?.with_minute(45))().unwrap()
+                                + Duration::days(1))
+                            .naive_utc()
+                            .into(),
+                        }]
+                        .into(),
+                        actual_executions: vec![].into(),
+                        child_todos: YBox::new(vec![].into()),
+                    }]
+                    .into(),
+                ),
+            }]
+            .into(),
+        };
 
         let doc = yrs::Doc::new();
         let map = doc.get_or_insert_map("map");
         let mut txn = doc.transact_mut();
-        let state = State::new(map, &mut txn, todos);
+        let state = map.insert(&mut txn, "state", state_prelim);
 
-        let days = CalendarProps::days_prop_from_todo_datas_and_start_date(
-            state.todos(&txn),
+        let days = Calendar::days_prop_from_todo_datas_and_start_date(
+            &state.todos(&txn)?,
             &mut txn,
             start_date.naive_utc().date(),
-        );
+        )?;
 
         assert!(days[2..].iter().all(|day| day.is_empty()));
 
@@ -219,6 +224,8 @@ mod tests {
                 )),
                 offset: TimeLength::from(Duration::hours(8))
             },]
-        )
+        );
+
+        Ok(())
     }
 }
