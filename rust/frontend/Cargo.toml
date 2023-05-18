@@ -12,11 +12,13 @@ derive_more = "0.99.17"
 js-sys = "0.3.61"
 leptos = { version = "0.2.5", features = ["tracing"] }
 once_cell = "1.17.1"
+thiserror = "1.0.40"
 tracing-wasm = "0.2.1"
 uuid = { version = "1.3.2", features = [ "js"] }
 wasm-bindgen = "0.2.84"
 web-sys = {version = "*", features = ["HtmlElement", "DomRect", "Element"] }
 wire = { path = "../wire" }
+yrs_wrappers = { path = "../yrs_wrappers" }
 yrs = "0.16.5"
 
 # [[package.metadata.leptos]]

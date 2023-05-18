@@ -1,4 +1,4 @@
-use leptos::{tracing::info, *};
+use leptos::*;
 use leptos_dom::html::div;
 use std::ops::Deref;
 

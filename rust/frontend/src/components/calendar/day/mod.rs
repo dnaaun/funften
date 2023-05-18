@@ -4,6 +4,9 @@ use leptos::leptos_dom::Each;
 use leptos::*;
 use once_cell::sync::Lazy;
 use std::ops::Deref;
+use yrs_wrappers::yrs_wrapper_error::YrsResult;
+
+use crate::gui_error::GuiResult;
 
 use self::length::TimeLength;
 use self::period::{Period, PeriodProps, PeriodState};
@@ -20,7 +23,7 @@ pub struct PeriodWithOffset {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DayProps {
     pub day: Signal<NaiveDate>,
-    pub period_with_offsets: Signal<Vec<PeriodWithOffset>>,
+    pub period_with_offsets: Signal<YrsResult<Vec<PeriodWithOffset>>>,
 }
 
 #[allow(non_snake_case)]
@@ -30,11 +33,12 @@ pub fn Day(
         day,
         period_with_offsets,
     }: DayProps,
-) -> impl IntoView {
+) -> GuiResult<impl IntoView> {
     static TWENTY_FOUR_HOURS_LENGTH: Lazy<usize> =
         Lazy::new(|| *TimeLength::from(Duration::hours(24)).deref());
 
-    div(cx)
+    let period_with_offsets = period_with_offsets.get()?;
+    Ok(div(cx)
         .classes("items-stretch flex-grow relative")
         .child(
             div(cx)
@@ -50,7 +54,7 @@ pub fn Day(
                 )
                 .classes("items-stretch flex-grow relative border-l border-gray-200")
                 .child(Each::new(
-                    period_with_offsets,
+                    move || period_with_offsets.clone(),
                     |p| p.clone(),
                     |cx, p| {
                         div(cx)
@@ -64,5 +68,5 @@ pub fn Day(
                             .child(Period(cx, PeriodProps { period: p.period }))
                     },
                 )),
-        )
+        ))
 }

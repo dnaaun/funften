@@ -1,18 +1,24 @@
 use once_cell::sync::Lazy;
 use std::cell::RefCell;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::rc::Rc;
+use wire::state::StatePrelim;
+use yrs::Map;
+use yrs::TextPrelim;
 use yrs::Transact;
+use yrs::TransactionMut;
+use yrs_wrappers::yrs_vec::YrsVecPrelim;
 
 use chrono::offset::TimeZone;
 
 use chrono::{Duration, Timelike, Utc};
 use leptos::html::*;
 use leptos::*;
-use uuid::Uuid;
-use wire::state::{
-    ActualExecutionData, PlannedExecutionData, State, TodoData, TransactionMutContext,
-};
+use wire::state::{ActualExecutionPrelim, PlannedExecutionPrelim, TodoPrelim};
+
+use crate::gui_error::GuiError;
+use crate::gui_error::GuiResult;
 
 use super::calendar::{Calendar, CalendarProps};
 use super::duration::{DurationState, DurationType};
@@ -46,56 +52,62 @@ impl DraftEntry {
 
 static DOC: Lazy<yrs::Doc> = Lazy::new(|| yrs::Doc::new());
 
+pub type TransactionMutContext = Rc<RefCell<TransactionMut<'static>>>;
+
 #[allow(non_snake_case)]
-pub fn Page(cx: Scope) -> HtmlElement<Div> {
-    let test_start_date = Utc.with_ymd_and_hms(2023, 5, 1, 8, 0, 0).unwrap();
+pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
+    let test_start_date = Utc
+        .with_ymd_and_hms(2023, 5, 1, 8, 0, 0)
+        .unwrap()
+        .naive_utc();
 
     let draft_entry = DraftEntry::new(cx);
-    let start_day = create_rw_signal(cx, test_start_date.naive_utc().date());
+    let start_day = create_rw_signal(cx, test_start_date.date());
 
-    let map = DOC.get_or_insert_map("state");
+    let root = DOC.get_or_insert_map("root");
     // Rc<RefCell<>> to make TransactMut Clone, so that I can leptos::provide_context it.
     let rc_refcell_txn: TransactionMutContext = Rc::new(RefCell::new(DOC.deref().transact_mut()));
     leptos::provide_context(cx, rc_refcell_txn.clone());
 
     let txn = leptos::use_context::<TransactionMutContext>(cx).unwrap();
-    let state = State::new(
-        map,
-        &mut txn.borrow_mut(),
-        vec![TodoData {
-            id: Uuid::new_v4(),
-            text: "My only TODO".into(),
-            completed: false,
-            created_at: test_start_date,
-            estimated_duration: Duration::hours(10),
-            planned_executions: vec![PlannedExecutionData {
-                id: Uuid::new_v4(),
-                start: test_start_date.with_hour(10).unwrap(),
+    let state = StatePrelim {
+        todos: vec![TodoPrelim {
+            text: TextPrelim::new("My only TODO".into()),
+            completed: false.into(),
+            created_at: test_start_date.into(),
+            estimated_duration: Duration::hours(10).into(),
+            planned_executions: vec![PlannedExecutionPrelim {
+                start: test_start_date.with_hour(10).unwrap().into(),
                 end: test_start_date
                     .with_hour(10)
                     .unwrap()
                     .with_minute(45)
-                    .unwrap(),
-            }],
-            actual_executions: vec![ActualExecutionData {
-                id: Uuid::new_v4(),
-                start: test_start_date.with_minute(5).unwrap(),
+                    .unwrap()
+                    .into(),
+            }]
+            .into(),
+            actual_executions: vec![ActualExecutionPrelim {
+                start: test_start_date.with_minute(5).unwrap().into(),
                 end: Some(
                     test_start_date
                         .with_hour(9)
                         .unwrap()
                         .with_minute(55)
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                 ),
-            }],
-            child_todos: Box::new(vec![]),
-        }],
-    );
+            }]
+            .into(),
+            child_todos: Box::new(YrsVecPrelim::from(vec![])).into(),
+        }]
+        .into(),
+    };
 
+    let state = root.insert(&mut txn.borrow_mut(), "state", state);
     let cur_seven_days = Signal::derive(cx, move || {
-        let todos = state.todos(txn.borrow_mut().deref_mut());
+        let todos = state.todos(txn.borrow().deref());
         CalendarProps::days_prop_from_todo_datas_and_start_date(
-            todos,
+            &todos?,
             txn.borrow_mut().deref_mut(),
             start_day.get(),
         )
@@ -111,7 +123,7 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
             .set(start_date_formatted.replace("08:00", "08:45"));
     });
 
-    div(cx)
+    Ok(div(cx)
         .child(TopBar(
             cx,
             TopBarProps {
@@ -125,5 +137,5 @@ pub fn Page(cx: Scope) -> HtmlElement<Div> {
                 days: cur_seven_days,
                 start_day: start_day.into(),
             },
-        ))
+        )))
 }
