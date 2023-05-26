@@ -8,4 +8,4 @@ pub mod yrs_vec;
 pub mod yrs_struct;
 pub mod ybox;
 pub mod yrs_wrapper_error;
-pub mod yrs_insert_to_fetch;
+pub mod yrs_display;

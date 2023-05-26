@@ -18,7 +18,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
     struct FieldInfo {
         name: syn::Ident,
         ty: syn::Type,
-        ty_literal: Literal,
+        name_literal: Literal,
         is_option: bool,
     }
     let field_names_and_types = match data {
@@ -29,7 +29,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
                 .map(|f| {
                     let name = f.ident.clone().expect("Only named fields are supported");
                     let field_type = f.ty.clone();
-                    let ty_literal = Literal::string(&name.to_string());
+                    let name_literal = Literal::string(&name.to_string());
 
                     let (ty, is_option) = match &field_type {
                         syn::Type::Path(tp) => {
@@ -55,7 +55,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
                     FieldInfo {
                         name,
                         ty,
-                        ty_literal,
+                        name_literal,
                         is_option,
                     }
                 })
@@ -65,13 +65,13 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
         _ => panic!("Only structs are supported"),
     };
 
-    let field_checkers_in_try_from = field_names_and_types.iter().map(|FieldInfo { name, ty, ty_literal, is_option }| {
+    let field_checkers_in_try_from = field_names_and_types.iter().map(|FieldInfo { name, ty, name_literal, is_option }| {
         let value_at_field_name = format_ident!("value_at_{}", name);
         let field_name_is_prelim_for = format_ident!("{}PrelimFor", name);
 
         if *is_option {
             quote! {
-                let #value_at_field_name = <yrs::MapRef as yrs::Map>::get(&map_ref, txn, #ty_literal);
+                let #value_at_field_name = <yrs::MapRef as yrs::Map>::get(&map_ref, txn, #name_literal);
 
                 if let Some(value) = #value_at_field_name {
                     #[allow(non_camel_case_types)]
@@ -84,7 +84,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
             }
         } else {
             quote! {
-                let #value_at_field_name = match <yrs::MapRef as yrs::Map>::get(&map_ref, txn, #ty_literal) {
+                let #value_at_field_name = match <yrs::MapRef as yrs::Map>::get(&map_ref, txn, #name_literal) {
                     Some(value) => value,
                     None => return Err(yrs_wrappers::yrs_wrapper_error::YrsWrapperError::YMapMissingAttr {
                         attr: stringify!(#name).to_string(),
@@ -105,6 +105,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
 
     let name_without_prelim = format_ident!("{}", name.to_string().trim_end_matches("Prelim"));
     let main_struct = quote! {
+        #[derive(Clone, Debug)]
         pub struct #name_without_prelim(yrs::MapRef);
     };
 
@@ -130,12 +131,12 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
     let lines_in_prelim_integrate = field_names_and_types.iter().map(
         |FieldInfo {
              name,
-             ty_literal,
+             name_literal,
             is_option,
             ..
          }| {
             let line = quote! {
-                <yrs::MapRef as yrs::Map>::insert(&map, txn, #ty_literal, #name);
+                <yrs::MapRef as yrs::Map>::insert(&map, txn, #name_literal, #name);
             };
 
             let line = if *is_option {
@@ -191,7 +192,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
     let attr_access_impls =
         field_names_and_types
             .iter()
-            .map(|FieldInfo { name, ty_literal, ty, is_option }| {
+            .map(|FieldInfo { name, name_literal, ty, is_option }| {
                 let field_name_is_prelim_for = format_ident!("{}PrelimFor", name);
 
             let mut return_type = quote! {
@@ -206,7 +207,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
            
             let body = if *is_option {
                 quote! {
-                    let yrs_value = <yrs::MapRef as yrs::Map>::get(&self.0, txn, #ty_literal)?;
+                    let yrs_value = <yrs::MapRef as yrs::Map>::get(&self.0, txn, #name_literal)?;
 
                     // I'm not sure if this will be to expensive.
                     Some(<#field_name_is_prelim_for as yrs_wrappers::try_from_yrs_value::TryFromYrsValue>::try_from_yrs_value(
@@ -215,9 +216,9 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
                 }
             } else {
                 quote! {
-                    let yrs_value = <yrs::MapRef as yrs::Map>::get(&self.0, txn, #ty_literal).ok_or_else(|| {
+                    let yrs_value = <yrs::MapRef as yrs::Map>::get(&self.0, txn, #name_literal).ok_or_else(|| {
                         yrs_wrappers::yrs_wrapper_error::YrsWrapperError::YMapMissingAttr {
-                            attr: #ty_literal.to_string(),
+                            attr: #name_literal.to_string(),
                         }
                     })?;
 
@@ -232,11 +233,12 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
             quote! {
                 pub fn #name(
                     &self,
-                    txn: &impl yrs::ReadTxn,
+                    txn: impl std::ops::Deref<Target = impl yrs::ReadTxn>,
                 ) -> #return_type {
                     #[allow(non_camel_case_types)]
                     type #field_name_is_prelim_for = <#ty as yrs::block::Prelim>::Return;
 
+                    let txn = txn.deref();
 
                     #body
                 }
@@ -250,6 +252,65 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
         }
     };
 
+    let as_mut_impl = quote! {
+        impl core::convert::AsMut<yrs::types::Branch> for #name_without_prelim {
+            fn as_mut(&mut self) -> &mut yrs::types::Branch {
+                <yrs::MapRef as core::convert::AsMut<yrs::types::Branch>>::as_mut(&mut self.0)
+            }
+        }
+    };
+
+    let observable_impl = quote! {
+        impl yrs::types::Observable for #name_without_prelim {
+
+            type Event = <yrs::MapRef as yrs::types::Observable>::Event;
+
+            fn try_observer_mut(
+                &mut self
+            ) -> Option<&mut yrs::observer::Observer<std::sync::Arc<dyn Fn(&yrs::TransactionMut<'_>, &Self::Event)>>> {
+                self.0.try_observer_mut()
+            }
+
+            fn try_observer(
+                &self
+            ) -> Option<&yrs::observer::Observer<std::sync::Arc<dyn Fn(&yrs::TransactionMut<'_>, &Self::Event)>>> {
+                self.0.try_observer()
+            }
+
+        }
+    };
+    
+    let calls_in_yrs_display = field_names_and_types.iter().map(|field_name_and_type| {
+        let name = &field_name_and_type.name;
+        let name_string = name.to_string();
+
+        if field_name_and_type.is_option {
+            return quote! {
+                if let Some(value) = self.#name(txn) {
+                    let value = value?;
+                    result = result + #name_string + ": " + &yrs_wrappers::yrs_display::YrsDisplay::fmt(&value, txn)? + ", ";
+                } else {
+                    result = result + #name_string + ": None, ";
+                }
+            };
+        }
+        quote! {
+            result = result + #name_string + ": " + &yrs_wrappers::yrs_display::YrsDisplay::fmt(&self.#name(txn)?, txn)? + ", ";
+        }
+    });
+    let yrs_display_impl = quote! {
+        impl yrs_wrappers::yrs_display::YrsDisplay for #name_without_prelim {
+            fn fmt(&self, txn: &impl yrs::ReadTxn) -> yrs_wrappers::yrs_wrapper_error::YrsResult<String> {
+                let mut result = String::new();
+                result = result + "{ ";
+                #(#calls_in_yrs_display)*
+                result = result + " }";
+                Ok(result)
+            }
+        }
+
+    };
+
     let gen = quote! {
         #main_struct
 
@@ -260,6 +321,12 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
         #try_from_block_ptr_impl
 
         #main_struct_impl
+
+        #as_mut_impl
+
+        #observable_impl
+
+        #yrs_display_impl
     };
 
     gen.into()

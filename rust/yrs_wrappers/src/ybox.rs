@@ -1,4 +1,6 @@
-use crate::{try_from_yrs_value::TryFromYrsValue, yrs_wrapper_error::YrsResult};
+use crate::{
+    try_from_yrs_value::TryFromYrsValue, yrs_display::YrsDisplay, yrs_wrapper_error::YrsResult,
+};
 use yrs::block::{BlockPtr, Prelim};
 
 #[derive(derive_more::From, derive_more::Deref)]
@@ -49,3 +51,8 @@ impl<T> YBox<T> {
     }
 }
 
+impl<T: YrsDisplay> YrsDisplay for YBox<T> {
+    fn fmt(&self, txn: &impl yrs::ReadTxn) -> YrsResult<String> {
+        self.0.fmt(txn)
+    }
+}

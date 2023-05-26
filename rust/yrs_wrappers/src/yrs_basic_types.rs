@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 
 use crate::{
     try_from_yrs_value::TryFromYrsValue,
+    yrs_display::YrsDisplay,
     yrs_wrapper_error::{UnwrapAny, UnwrapYrsValue, YrsResult, YrsWrapperError},
 };
 
@@ -10,6 +11,12 @@ pub struct YBoolPrelim(bool);
 
 #[derive(Debug, derive_more::Deref)]
 pub struct YBool(bool);
+
+impl YrsDisplay for YBool {
+    fn fmt(&self, _txn: &impl yrs::ReadTxn) -> YrsResult<String> {
+        Ok(self.0.to_string())
+    }
+}
 
 impl yrs::block::Prelim for YBoolPrelim {
     type Return = YBool;
@@ -51,6 +58,12 @@ pub struct YDateTimePrelim(NaiveDateTime);
 
 #[derive(Debug, derive_more::Deref)]
 pub struct YDateTime(NaiveDateTime);
+
+impl YrsDisplay for YDateTime {
+    fn fmt(&self, _txn: &impl yrs::ReadTxn) -> YrsResult<String> {
+        Ok(self.0.to_string())
+    }
+}
 
 impl yrs::block::Prelim for YDateTimePrelim {
     type Return = YDateTime;
@@ -101,6 +114,12 @@ pub struct YDurationPrelim(chrono::Duration);
 
 #[derive(Debug, derive_more::Deref)]
 pub struct YDuration(chrono::Duration);
+
+impl YrsDisplay for YDuration {
+    fn fmt(&self, _txn: &impl yrs::ReadTxn) -> YrsResult<String> {
+        Ok(self.0.to_string())
+    }
+}
 
 impl yrs::block::Prelim for YDurationPrelim {
     type Return = YDuration;

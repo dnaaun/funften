@@ -38,9 +38,11 @@ impl Calendar {
         };
 
         for todo in todos.iter(txn) {
+            let todo = todo?;
             todo.planned_executions(txn)?
                 .iter(txn)
                 .map(|pe| {
+                    let pe = pe?;
                     let start = pe.start(txn)?.date();
                     Ok((pe, start))
                 })
@@ -66,6 +68,7 @@ impl Calendar {
             todo.actual_executions(txn)?
                 .iter(txn)
                 .map(|ae| {
+                    let ae = ae?;
                     let start = ae.start(txn)?.date();
                     Ok((ae, start))
                 })
@@ -189,7 +192,7 @@ mod tests {
 
         let doc = yrs::Doc::new();
         let map = doc.get_or_insert_map("map");
-        let mut txn = doc.transact_mut();
+        let mut txn = doc.try_transact_mut().unwrap();
         let state = map.insert(&mut txn, "state", state_prelim);
 
         let days = Calendar::days_prop_from_todo_datas_and_start_date(

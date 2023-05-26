@@ -78,12 +78,12 @@ mod tests {
 
         let doc = Doc::new();
         let map = doc.get_or_insert_map("state");
-        let mut txn = doc.transact_mut();
+        let mut txn = doc.try_transact_mut().unwrap();
 
         let state = map.insert(&mut txn, "state", state_prelim);
 
         drop(txn);
-        let txn = doc.transact();
+        let txn = doc.try_transact().unwrap();
 
         let first_todo = state.todos(&txn)?.get(&txn, 0)?.unwrap();
 

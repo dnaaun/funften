@@ -1,3 +1,4 @@
+use crate::yrs_display::YrsDisplay;
 use crate::yrs_wrapper_error::UnwrapYrsValue;
 use crate::yrs_wrapper_error::YrsResult;
 use yrs::Array;
@@ -5,6 +6,7 @@ use yrs::Array;
 use super::try_from_yrs_value::TryFromYrsValue;
 use yrs::{block::Prelim, ArrayPrelim, ReadTxn, Transaction, TransactionMut};
 
+#[derive(Clone, Debug)]
 pub struct YrsVec<T> {
     inner: yrs::ArrayRef,
     phantom: std::marker::PhantomData<T>,
@@ -27,6 +29,12 @@ where
             inner: array_ref,
             phantom: std::marker::PhantomData,
         })
+    }
+}
+
+impl<T> core::convert::AsMut<yrs::types::Branch> for YrsVec<T> {
+    fn as_mut(&mut self) -> &mut yrs::types::Branch {
+        self.inner.as_mut()
     }
 }
 
@@ -83,11 +91,13 @@ impl<T> YrsVec<T>
 where
     T: TryFromYrsValue,
 {
-    pub fn iter<'a>(&'a self, txn: &'a impl yrs::ReadTxn) -> impl Iterator<Item = T> + 'a {
-        self.inner.iter(txn).map(move |value| {
-            T::try_from_yrs_value(value, txn)
-                .expect("YrsVec contains values that are not deserializable into T")
-        })
+    pub fn iter<'a>(
+        &'a self,
+        txn: &'a impl yrs::ReadTxn,
+    ) -> impl Iterator<Item = YrsResult<T>> + 'a {
+        self.inner
+            .iter(txn)
+            .map(move |value| T::try_from_yrs_value(value, txn))
     }
 
     pub fn len(&self, txn: &impl ReadTxn) -> u32 {
@@ -107,10 +117,32 @@ where
         self.inner.insert(txn, index, value)
     }
 
+    pub fn push<P: Prelim<Return = T>>(&self, txn: &mut TransactionMut, value: P) -> P::Return {
+        self.inner.insert(txn, self.inner.len(txn), value)
+    }
+
     pub fn get(&self, txn: &Transaction, index: u32) -> YrsResult<Option<T>> {
         self.inner
             .get(txn, index)
             .map(|value| T::try_from_yrs_value(value, txn))
             .transpose()
+    }
+}
+
+impl<T> YrsDisplay for YrsVec<T>
+where
+    T: YrsDisplay + TryFromYrsValue,
+{
+    fn fmt(&self, txn: &impl ReadTxn) -> YrsResult<String> {
+        let mut result = String::new();
+        result = result + "[";
+        for (i, value) in self.iter(txn).enumerate() {
+            if i > 0 {
+                result.push_str(", ");
+            }
+            result.push_str(&value?.fmt(txn)?);
+        }
+        result.push(']');
+        Ok(result)
     }
 }

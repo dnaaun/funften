@@ -1,3 +1,5 @@
+#![feature(local_key_cell_methods)]
+
 use wasm_bindgen::prelude::JsCast;
 use frontend::components::page::Page;
 use leptos::*;

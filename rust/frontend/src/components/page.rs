@@ -1,14 +1,11 @@
-use once_cell::sync::Lazy;
-use std::cell::RefCell;
-use std::ops::Deref;
-use std::ops::DerefMut;
-use std::rc::Rc;
+use yrs_wrappers::yrs_display::YrsDisplay;
 use wire::state::StatePrelim;
+use wire::state::Todo;
 use yrs::Map;
 use yrs::TextPrelim;
 use yrs::Transact;
-use yrs::TransactionMut;
 use yrs_wrappers::yrs_vec::YrsVecPrelim;
+use yrs_wrappers::yrs_wrapper_error::YrsResult;
 
 use chrono::offset::TimeZone;
 
@@ -17,14 +14,15 @@ use leptos::html::*;
 use leptos::*;
 use wire::state::{ActualExecutionPrelim, PlannedExecutionPrelim, TodoPrelim};
 
-use crate::gui_error::GuiResult;
-
 use super::calendar::Calendar;
 use super::duration::{DurationState, DurationType};
 use super::entry::entry_type::EntryTypeState;
 use super::topbar::TopBar;
+use crate::gui_error::GuiResult;
+use crate::leptos_utils::yrs::YrsSignal;
+use crate::use_doc::use_doc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DraftEntry {
     pub type_: RwSignal<Option<EntryTypeState>>,
     pub text: RwSignal<String>,
@@ -32,6 +30,7 @@ pub struct DraftEntry {
     pub end_datetime: RwSignal<String>,
     pub completed_at: RwSignal<String>,
     pub estimated_duration: DurationState,
+    pub parent_todo: RwSignal<Option<Todo>>,
 }
 
 impl DraftEntry {
@@ -46,13 +45,10 @@ impl DraftEntry {
                 duration_amount: create_rw_signal(cx, Default::default()),
                 duration_type: create_rw_signal(cx, Some(DurationType::Seconds)),
             },
+            parent_todo: create_rw_signal(cx, Default::default()),
         }
     }
 }
-
-static DOC: Lazy<yrs::Doc> = Lazy::new(|| yrs::Doc::new());
-
-pub type TransactionMutContext = Rc<RefCell<TransactionMut<'static>>>;
 
 #[allow(non_snake_case)]
 pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
@@ -64,12 +60,10 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
     let entry = DraftEntry::new(cx);
     let start_day = create_rw_signal(cx, test_start_date.date());
 
-    let root = DOC.get_or_insert_map("root");
-    // Rc<RefCell<>> to make TransactMut Clone, so that I can leptos::provide_context it.
-    let rc_refcell_txn: TransactionMutContext = Rc::new(RefCell::new(DOC.deref().transact_mut()));
-    leptos::provide_context(cx, rc_refcell_txn.clone());
+    let doc = yrs::Doc::new();
+    let root = doc.get_or_insert_map("root");
+    leptos::provide_context(cx, doc);
 
-    let txn = leptos::use_context::<TransactionMutContext>(cx).unwrap();
     let state = StatePrelim {
         todos: vec![TodoPrelim {
             text: TextPrelim::new("My only TODO".into()),
@@ -98,33 +92,64 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
                 ),
             }]
             .into(),
-            child_todos: Box::new(YrsVecPrelim::from(vec![])).into(),
+            child_todos: Box::new(YrsVecPrelim::from(vec![TodoPrelim {
+                text: TextPrelim::new("My child TODO".into()),
+                completed: false.into(),
+                created_at: test_start_date.into(),
+                estimated_duration: Duration::hours(10).into(),
+                planned_executions: vec![].into(),
+                actual_executions: vec![].into(),
+                child_todos: Box::new(YrsVecPrelim::from(vec![])).into(),
+            }]))
+            .into(),
         }]
         .into(),
     };
 
-    let state = root.insert(&mut txn.borrow_mut(), "state", state);
-    let seven_days = Signal::derive(cx, move || {
-        let todos = state.todos(txn.borrow().deref());
-        Calendar::days_prop_from_todo_datas_and_start_date(
-            &todos?,
-            txn.borrow_mut().deref_mut(),
-            start_day.get(),
-        )
+    let doc = use_doc(cx);
+    let mut txn = doc.try_transact_mut().unwrap();
+    let state = root.insert(&mut txn, "state", state);
+    // let todos = create_rw_signal(cx, state.todos(&txn)?);
+    let todos = YrsSignal::new(cx, use_doc(cx), state.todos(&txn)?);
+    drop(txn);
+
+    let seven_days = todos.derive(cx, move |todos, txn| {
+        tracing::info!("{}", todos.fmt(txn).unwrap());
+        Calendar::days_prop_from_todo_datas_and_start_date(&todos, txn, start_day.get())
     });
 
     // Auto-fill the start and end datetime fields with the start date corresponding to the day
     // that starts the visible calendar.
     create_effect(cx, move |_| {
-        let start_date_formatted = start_day.get().format("%Y-%m-%dT08:00").to_string();
+        let start_date_formatted = start_day.get().format("%Y-%m-%dT01:00").to_string();
         entry.start_datetime.set(start_date_formatted.clone());
         entry
             .end_datetime
-            .set(start_date_formatted.replace("08:00", "08:45"));
+            .set(start_date_formatted.replace("01:00", "01:45"));
     });
 
-    Ok(div(cx).child(TopBar { entry, start_day }).child(Calendar {
-        seven_days,
-        start_day: start_day.into(),
-    }))
+    let flattened_todos = todos.derive(cx, |todos, txn| {
+        let mut flattened_todos = vec![];
+        for todo in todos.iter(txn) {
+            let todo = todo?;
+            let child_todos = todo
+                .child_todos(txn)?
+                .iter(txn)
+                .collect::<YrsResult<Vec<_>>>()?;
+            flattened_todos.push(todo);
+            flattened_todos.extend(child_todos);
+        }
+        YrsResult::Ok(flattened_todos)
+    });
+
+    Ok(div(cx)
+        .child(TopBar {
+            entry,
+            start_day,
+            flattened_todos,
+        })
+        .child(Calendar {
+            seven_days,
+            start_day: start_day.into(),
+        }))
 }

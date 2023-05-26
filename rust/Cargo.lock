@@ -648,9 +648,11 @@ dependencies = [
  "chrono",
  "console_error_panic_hook",
  "derive_more",
+ "itertools",
  "js-sys",
  "leptos",
  "once_cell",
+ "slotmap",
  "thiserror",
  "tracing-wasm",
  "uuid",
@@ -1251,8 +1253,6 @@ dependencies = [
 [[package]]
 name = "lib0"
 version = "0.16.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf23122cb1c970b77ea6030eac5e328669415b65d2ab245c99bfb110f9d62dc"
 dependencies = [
  "thiserror",
 ]
@@ -2975,8 +2975,6 @@ dependencies = [
 [[package]]
 name = "yrs"
 version = "0.16.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c2aef2bf89b4f7c003f9c73f1c8097427ca32e1d006443f3f607f11e79a797b"
 dependencies = [
  "atomic_refcell",
  "lib0",
