@@ -4,5 +4,6 @@ members = [
 "backend",
 "wire",
 "yrs_wrappers",
-"yrs_struct_derive"
+"yrs_struct_derive",
+"core_logic"
 ]

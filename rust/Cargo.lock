@@ -192,7 +192,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "yrs",
+ "yrs 0.16.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -657,9 +657,10 @@ dependencies = [
  "tracing-wasm",
  "uuid",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
  "wire",
- "yrs",
+ "yrs 0.16.5",
  "yrs_wrappers",
 ]
 
@@ -1253,6 +1254,15 @@ dependencies = [
 [[package]]
 name = "lib0"
 version = "0.16.5"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "lib0"
+version = "0.16.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf23122cb1c970b77ea6030eac5e328669415b65d2ab245c99bfb110f9d62dc"
 dependencies = [
  "thiserror",
 ]
@@ -2949,11 +2959,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "lib0",
+ "lib0 0.16.5",
  "serde",
  "thiserror",
  "uuid",
- "yrs",
+ "yrs 0.16.5",
  "yrs_wrappers",
 ]
 
@@ -2977,7 +2987,21 @@ name = "yrs"
 version = "0.16.5"
 dependencies = [
  "atomic_refcell",
- "lib0",
+ "lib0 0.16.5",
+ "rand 0.7.3",
+ "smallstr",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "yrs"
+version = "0.16.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c2aef2bf89b4f7c003f9c73f1c8097427ca32e1d006443f3f607f11e79a797b"
+dependencies = [
+ "atomic_refcell",
+ "lib0 0.16.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.3",
  "smallstr",
  "smallvec",
@@ -2999,9 +3023,9 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "derive_more",
- "lib0",
+ "lib0 0.16.5",
  "thiserror",
  "uuid",
- "yrs",
+ "yrs 0.16.5",
  "yrs_struct_derive",
 ]
