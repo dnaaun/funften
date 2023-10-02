@@ -26,7 +26,7 @@ impl Persistence for InMemoryPersist {
     }
 
     async fn store_update(&self, update: yrs::Update) -> Result<(), Self::Error> {
-        self.doc.lock().transact_mut().apply_update(update);
+        self.doc.lock().try_transact_mut().unwrap().apply_update(update);
 
         let listeners = self.update_listeners.clone();
         tokio::spawn(async move {

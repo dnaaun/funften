@@ -7,3 +7,4 @@ pub mod leptos_utils;
 pub mod gui_error;
 pub mod use_doc;
 pub mod utils;
+mod yrs_persist;
