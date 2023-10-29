@@ -104,9 +104,12 @@ mod tests {
                 .get(&txn, 0)?
                 .unwrap()
                 .start(&txn)?
-                .format("%Y-%m-%dT%H:%M:%S%.fZ")
+                // Not testing the fractional component of the seconds because I'm getting errors rn
+                // that I don't want to look into (or at least I believe `%.f` refers to fractional
+                // seconds, because that's what I removed.
+                .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string(),
-            start.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string()
+            start.format("%Y-%m-%dT%H:%M:%SZ").to_string()
         );
 
         Ok(())

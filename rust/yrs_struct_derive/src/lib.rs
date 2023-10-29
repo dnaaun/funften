@@ -132,8 +132,8 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
         |FieldInfo {
              name,
              name_literal,
-            is_option,
-            ..
+             is_option,
+             ..
          }| {
             let line = quote! {
                 <yrs::MapRef as yrs::Map>::insert(&map, txn, #name_literal, #name);
@@ -149,7 +149,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
                 line
             };
 
-            quote!{
+            quote! {
                 let #name = self.#name;
                 #line
             }
@@ -279,7 +279,7 @@ pub fn yrs_wrapper_derive(input: TokenStream) -> TokenStream {
 
         }
     };
-    
+
     let calls_in_yrs_display = field_names_and_types.iter().map(|field_name_and_type| {
         let name = &field_name_and_type.name;
         let name_string = name.to_string();

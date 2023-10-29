@@ -1,9 +1,9 @@
-use yrs_wrappers::yrs_display::YrsDisplay;
 use wire::state::StatePrelim;
 use wire::state::Todo;
 use yrs::Map;
 use yrs::TextPrelim;
 use yrs::Transact;
+use yrs_wrappers::yrs_display::YrsDisplay;
 use yrs_wrappers::yrs_vec::YrsVecPrelim;
 use yrs_wrappers::yrs_wrapper_error::YrsResult;
 

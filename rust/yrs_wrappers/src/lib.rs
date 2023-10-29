@@ -3,9 +3,9 @@
 #![feature(provide_any)]
 
 pub mod try_from_yrs_value;
-pub mod yrs_basic_types;
-pub mod yrs_vec;
-pub mod yrs_struct;
 pub mod ybox;
-pub mod yrs_wrapper_error;
+pub mod yrs_basic_types;
 pub mod yrs_display;
+pub mod yrs_struct;
+pub mod yrs_vec;
+pub mod yrs_wrapper_error;

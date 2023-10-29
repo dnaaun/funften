@@ -17,7 +17,11 @@ impl<V: IntoView + std::clone::Clone> SelectButton<V> {
             .child(div(cx).classes("mr-2").child(self.text.clone()))
             .child(include_html!(cx, "../../icons/chevron-down.svg").classes("w-4 h-4"));
 
-        Button { disabled: false.into() }.view(cx).child(btn_child)
+        Button {
+            disabled: false.into(),
+        }
+        .view(cx)
+        .child(btn_child)
     }
 }
 

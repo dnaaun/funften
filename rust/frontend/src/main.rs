@@ -1,8 +1,8 @@
 #![feature(local_key_cell_methods)]
 
-use wasm_bindgen::prelude::JsCast;
 use frontend::components::page::Page;
 use leptos::*;
+use wasm_bindgen::prelude::JsCast;
 
 fn main() {
     console_error_panic_hook::set_once();
