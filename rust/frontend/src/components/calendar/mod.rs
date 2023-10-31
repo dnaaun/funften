@@ -150,6 +150,7 @@ mod tests {
 
         let state_prelim = StatePrelim {
             todos: vec![TodoPrelim {
+                title: TextPrelim::new("My only TODO".into()),
                 text: TextPrelim::new("My only TODO".into()),
                 completed: false.into(),
                 created_at: start_date.naive_utc().into(),
@@ -169,6 +170,7 @@ mod tests {
                 .into(),
                 child_todos: YBox::new(
                     vec![TodoPrelim {
+                        title: TextPrelim::new("My child TODO".into()),
                         text: TextPrelim::new("My child TODO".into()),
                         completed: false.into(),
                         created_at: (start_date + Duration::days(1)).naive_utc().into(),

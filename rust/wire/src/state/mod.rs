@@ -22,6 +22,7 @@ pub struct ActualExecutionPrelim {
 
 #[derive(YrsStruct)]
 pub struct TodoPrelim {
+    pub title: TextPrelim<String>,
     pub text: TextPrelim<String>,
     pub completed: YBoolPrelim,
     pub created_at: YDateTimePrelim,
@@ -57,6 +58,7 @@ mod tests {
         let start = chrono::Utc::now().naive_utc();
         let state_prelim = StatePrelim {
             todos: vec![TodoPrelim {
+                title: TextPrelim::new("yo".into()),
                 text: TextPrelim::new("yo".into()),
                 completed: false.into(),
                 created_at: chrono::Utc::now().naive_utc().into(),

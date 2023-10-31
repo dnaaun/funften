@@ -66,6 +66,7 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
 
     let state = StatePrelim {
         todos: vec![TodoPrelim {
+            title: TextPrelim::new("My only TODO".into()),
             text: TextPrelim::new("My only TODO".into()),
             completed: false.into(),
             created_at: test_start_date.into(),
@@ -93,6 +94,7 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
             }]
             .into(),
             child_todos: Box::new(YrsVecPrelim::from(vec![TodoPrelim {
+                title: TextPrelim::new("My child TODO".into()),
                 text: TextPrelim::new("My child TODO".into()),
                 completed: false.into(),
                 created_at: test_start_date.into(),
