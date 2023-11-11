@@ -30,6 +30,7 @@ pub struct TodoPrelim {
     pub planned_executions: YrsVecPrelim<PlannedExecutionPrelim>,
     pub actual_executions: YrsVecPrelim<ActualExecutionPrelim>,
     pub child_todos: YBox<YrsVecPrelim<TodoPrelim>>,
+    pub deadline: Option<YDateTimePrelim>,
 }
 
 #[derive(YrsStruct)]
@@ -74,6 +75,7 @@ mod tests {
                 }]
                 .into(),
                 child_todos: YBox::new(vec![].into()),
+                deadline: Some((start + chrono::Duration::days(1)).into()),
             }]
             .into(),
         };
@@ -112,6 +114,18 @@ mod tests {
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string(),
             start.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+        );
+
+        assert_eq!(
+            first_todo
+                .deadline(&txn)
+                .transpose()?
+                .unwrap()
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            (start + chrono::Duration::days(1))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string()
         );
 
         Ok(())

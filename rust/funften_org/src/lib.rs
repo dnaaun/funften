@@ -31,16 +31,16 @@ fn get_todos_from_org_file(org_file: &Path) -> Result<Vec<TodoPrelim>> {
 }
 
 fn get_todos_from_org_parse(org_parse: &Org) -> Vec<Result<TodoPrelim>> {
-    println!(
-        "{:#?}",
-        org_parse
-            .iter()
-            .filter_map(|el| match el {
-                orgize::Event::Start(el) => Some(el),
-                orgize::Event::End(_) => None,
-            })
-            .collect::<Vec<_>>()
-    );
+    // println!(
+    //     "{:#?}",
+    //     org_parse
+    //         .iter()
+    //         .filter_map(|el| match el {
+    //             orgize::Event::Start(el) => Some(el),
+    //             orgize::Event::End(_) => None,
+    //         })
+    //         .collect::<Vec<_>>()
+    // );
     org_parse
         .headlines()
         .map(|h| get_todo_from_headline(h, org_parse))
@@ -79,7 +79,7 @@ mod tests {
 SCHEDULED: <2023-10-29 Sun 18:30>",
         );
 
-        get_todos_from_org_parse(&org_parse);
+        // get_todos_from_org_parse(&org_parse);
         Ok(())
     }
 }

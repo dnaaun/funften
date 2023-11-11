@@ -185,9 +185,11 @@ mod tests {
                         .into(),
                         actual_executions: vec![].into(),
                         child_todos: YBox::new(vec![].into()),
+                        deadline: None,
                     }]
                     .into(),
                 ),
+                deadline: None,
             }]
             .into(),
         };

@@ -102,8 +102,11 @@ pub fn Page(cx: Scope) -> GuiResult<HtmlElement<Div>> {
                 planned_executions: vec![].into(),
                 actual_executions: vec![].into(),
                 child_todos: Box::new(YrsVecPrelim::from(vec![])).into(),
+                deadline: None,
             }]))
             .into(),
+
+            deadline: None,
         }]
         .into(),
     };
