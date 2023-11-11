@@ -1,6 +1,5 @@
-// I don't know why having  a backtrace in thiserror error structs require these features.
+// I don't know why having  a backtrace in thiserror error structs require this feature.
 #![feature(error_generic_member_access)]
-#![feature(provide_any)]
 
 pub mod try_from_yrs_value;
 pub mod ybox;
