@@ -48,11 +48,9 @@ use std::convert::TryInto;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
-use async_trait::async_trait;
 
 /// A trait to be implemented by the specific key-value store transaction equivalent in order to
 /// auto-implement features provided by [DocOps] trait.
-#[async_trait]
 pub trait KVStore<'a> {
     /// Error type returned from the implementation.
     type Error: std::error::Error;
@@ -65,7 +63,7 @@ pub trait KVStore<'a> {
     type Return: AsRef<[u8]>;
 
     /// Return a value stored under given `key` or `None` if key was not found.
-    fn get(&self, key: &[u8]) -> Result<Option<Self::Return>, Self::Error>;
+    async fn get(&self, key: &[u8]) -> Result<Option<Self::Return>, Self::Error>;
 
     /// Insert a new `value` under given `key` or replace an existing value with new one if
     /// entry with that `key` already existed.
@@ -105,14 +103,14 @@ where
     /// used for storing the document.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    fn insert_doc<K: AsRef<[u8]> + ?Sized, T: ReadTxn>(
+    async fn insert_doc<K: AsRef<[u8]> + ?Sized, T: ReadTxn>(
         &self,
         name: &K,
         txn: &T,
     ) -> Result<(), Error> {
         let doc_state = txn.encode_diff_v1(&StateVector::default());
         let state_vector = txn.state_vector().encode_v1();
-        self.insert_doc_raw_v1(name.as_ref(), &doc_state, &state_vector)
+        Ok(self.insert_doc_raw_v1(name.as_ref(), &doc_state, &state_vector).await?)
     }
 
     /// Inserts or updates a document given it's binary update and state vector. lib0 v1 encoding is
@@ -122,13 +120,13 @@ where
     /// a database transaction.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    fn insert_doc_raw_v1(
+    async fn insert_doc_raw_v1(
         &self,
         name: &[u8],
         doc_state_v1: &[u8],
         doc_sv_v1: &[u8],
     ) -> Result<(), Error> {
-        let oid = get_or_create_oid(self, name)?;
+        let oid = get_or_create_oid(self, name).await?;
         insert_inner_v1(self, oid, doc_state_v1, doc_sv_v1)?;
         Ok(())
     }
@@ -138,16 +136,16 @@ where
     /// entries that may not have been merged with the main document state yet.
     ///
     /// This feature requires only a read capabilities from the database transaction.
-    fn load_doc<K: AsRef<[u8]> + ?Sized>(
+    async fn load_doc<K: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K,
-        txn: &mut TransactionMut,
-    ) -> Result<bool, Error> {
-        if let Some(oid) = get_oid(self, name.as_ref())? {
-            let loaded = load_doc(self, oid, txn)?;
-            Ok(loaded != 0)
+        doc: yrs::Doc,
+    ) -> Result<(yrs::Doc, bool), Error> {
+        if let Some(oid) = get_oid(self, name.as_ref()).await? {
+            let (doc, loaded) = load_doc(self, oid, doc).await?;
+            Ok((doc, loaded != 0))
         } else {
-            Ok(false)
+            Ok((doc, false))
         }
     }
 
@@ -156,8 +154,8 @@ where
     /// been integrated this way. Returns the [Doc] with the most recent state produced this way.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    fn flush_doc<K: AsRef<[u8]> + ?Sized>(&self, name: &K) -> Result<Option<Doc>, Error> {
-        self.flush_doc_with(name, yrs::Options::default())
+    async fn flush_doc<K: AsRef<[u8]> + ?Sized>(&self, name: &K) -> Result<Option<Doc>, Error> {
+        Ok(self.flush_doc_with(name, yrs::Options::default()).await?)
     }
 
     /// Merges all updates stored via [Self::push_update] that were detached from the main document
@@ -167,13 +165,13 @@ where
     /// `options` parameter.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    fn flush_doc_with<K: AsRef<[u8]> + ?Sized>(
+    async fn flush_doc_with<K: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K,
         options: yrs::Options,
     ) -> Result<Option<Doc>, Error> {
-        if let Some(oid) = get_oid(self, name.as_ref())? {
-            let doc = flush_doc(self, oid, options)?;
+        if let Some(oid) = get_oid(self, name.as_ref()).await? {
+            let doc = flush_doc(self, oid, options).await?;
             Ok(doc)
         } else {
             Ok(None)
@@ -189,13 +187,13 @@ where
     /// updates using either [Self::load_doc] (read-only) or [Self::flush_doc] (read-write).
     ///
     /// This feature requires only the read capabilities from the database transaction.
-    fn get_state_vector<K: AsRef<[u8]> + ?Sized>(
+    async fn get_state_vector<K: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K,
     ) -> Result<(Option<StateVector>, bool), Error> {
-        if let Some(oid) = get_oid(self, name.as_ref())? {
+        if let Some(oid) = get_oid(self, name.as_ref()).await? {
             let key = key_state_vector(oid);
-            let data = self.get(&key)?;
+            let data = self.get(&key).await?;
             let sv = if let Some(data) = data {
                 let state_vector = StateVector::decode_v1(data.as_ref())?;
                 Some(state_vector)
@@ -220,8 +218,8 @@ where
     /// pruned (using [Self::flush_doc] method), sequence number is reset.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    fn push_update<K: AsRef<[u8]> + ?Sized>(&self, name: &K, update: &[u8]) -> Result<u32, Error> {
-        let oid = get_or_create_oid(self, name.as_ref())?;
+    async fn push_update<K: AsRef<[u8]> + ?Sized>(&self, name: &K, update: &[u8]) -> Result<u32, Error> {
+        let oid = get_or_create_oid(self, name.as_ref()).await?;
         let last_clock = {
             let end = key_update(oid, u32::MAX);
             if let Some(e) = self.peek_back(&end)? {
@@ -243,15 +241,14 @@ where
     /// happened since provided state vector for a given document.
     ///
     /// This feature requires only the read capabilities from the database transaction.
-    fn get_diff<K: AsRef<[u8]> + ?Sized>(
+    async fn get_diff<K: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K,
         sv: &StateVector,
     ) -> Result<Option<Vec<u8>>, Error> {
         let doc = Doc::new();
-        let found = {
-            let mut txn = doc.transact_mut();
-            self.load_doc(name, &mut txn)?
+        let (doc, found) = {
+            self.load_doc(name, doc).await?
         };
         if found {
             Ok(Some(doc.transact().encode_diff_v1(sv)))
@@ -263,9 +260,9 @@ where
     /// Removes all data associated with the current document (including its updates and metadata).
     ///
     /// This feature requires a write capabilities from the database transaction.
-    fn clear_doc<K: AsRef<[u8]> + ?Sized>(&self, name: &K) -> Result<(), Error> {
+    async fn clear_doc<K: AsRef<[u8]> + ?Sized>(&self, name: &K) -> Result<(), Error> {
         let oid_key = key_oid(name.as_ref());
-        if let Some(oid) = self.get(&oid_key)? {
+        if let Some(oid) = self.get(&oid_key).await? {
             // all document related elements are stored within bounds [0,1,..oid,0]..[0,1,..oid,255]
             let oid: [u8; 4] = oid.as_ref().try_into().unwrap();
             let oid = OID::from_be_bytes(oid);
@@ -286,14 +283,14 @@ where
     /// Returns a metadata value stored under its metadata `key` for a document with given `name`.
     ///
     /// This feature requires only the read capabilities from the database transaction.
-    fn get_meta<K1: AsRef<[u8]> + ?Sized, K2: AsRef<[u8]> + ?Sized>(
+    async fn get_meta<K1: AsRef<[u8]> + ?Sized, K2: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K1,
         meta_key: &K2,
     ) -> Result<Option<Self::Return>, Error> {
-        if let Some(oid) = get_oid(self, name.as_ref())? {
+        if let Some(oid) = get_oid(self, name.as_ref()).await? {
             let key = key_meta(oid, meta_key.as_ref());
-            Ok(self.get(&key)?)
+            Ok(self.get(&key).await?)
         } else {
             Ok(None)
         }
@@ -303,13 +300,13 @@ where
     /// given `name`.
     ///
     /// This feature requires write capabilities from the database transaction.
-    fn insert_meta<K1: AsRef<[u8]> + ?Sized, K2: AsRef<[u8]> + ?Sized>(
+    async fn insert_meta<K1: AsRef<[u8]> + ?Sized, K2: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K1,
         meta_key: &K2,
         meta: &[u8],
     ) -> Result<(), Error> {
-        let oid = get_or_create_oid(self, name.as_ref())?;
+        let oid = get_or_create_oid(self, name.as_ref()).await?;
         let key = key_meta(oid, meta_key.as_ref());
         self.upsert(&key, meta)?;
         Ok(())
@@ -318,12 +315,12 @@ where
     /// Removes an metadata entry stored under given metadata `key` for a document with provided `name`.
     ///
     /// This feature requires write capabilities from the database transaction.
-    fn remove_meta<K1: AsRef<[u8]> + ?Sized, K2: AsRef<[u8]> + ?Sized>(
+    async fn remove_meta<K1: AsRef<[u8]> + ?Sized, K2: AsRef<[u8]> + ?Sized>(
         &self,
         name: &K1,
         meta_key: &K2,
     ) -> Result<(), Error> {
-        if let Some(oid) = get_oid(self, name.as_ref())? {
+        if let Some(oid) = get_oid(self, name.as_ref()).await? {
             let key = key_meta(oid, meta_key.as_ref());
             self.remove(&key)?;
         }
@@ -339,11 +336,11 @@ where
     }
 
     /// Returns an iterator over all metadata entries stored for a given document.
-    fn iter_meta<K: AsRef<[u8]> + ?Sized>(
+    async fn iter_meta<K: AsRef<[u8]> + ?Sized>(
         &self,
         doc_name: &K,
     ) -> Result<MetadataIter<Self::Cursor, Self::Entry>, Error> {
-        if let Some(oid) = get_oid(self, doc_name.as_ref())? {
+        if let Some(oid) = get_oid(self, doc_name.as_ref()).await? {
             let start = key_meta_start(oid).to_vec();
             let end = key_meta_end(oid).to_vec();
             let cursor = self.iter_range(&start, &end)?;
@@ -354,12 +351,12 @@ where
     }
 }
 
-fn get_oid<'a, DB: DocOps<'a> + ?Sized>(db: &DB, name: &[u8]) -> Result<Option<OID>, Error>
+async fn get_oid<'a, DB: DocOps<'a> + ?Sized>(db: &DB, name: &[u8]) -> Result<Option<OID>, Error>
 where
     Error: From<<DB as KVStore<'a>>::Error>,
 {
     let key = key_oid(name);
-    let value = db.get(&key)?;
+    let value = db.get(&key).await?;
     if let Some(value) = value {
         let bytes: [u8; 4] = value.as_ref().try_into().unwrap();
         let oid = OID::from_be_bytes(bytes);
@@ -369,11 +366,11 @@ where
     }
 }
 
-fn get_or_create_oid<'a, DB: DocOps<'a> + ?Sized>(db: &DB, name: &[u8]) -> Result<OID, Error>
+async fn get_or_create_oid<'a, DB: DocOps<'a> + ?Sized>(db: &DB, name: &[u8]) -> Result<OID, Error>
 where
     Error: From<<DB as KVStore<'a>>::Error>,
 {
-    if let Some(oid) = get_oid(db, name)? {
+    if let Some(oid) = get_oid(db, name).await? {
         Ok(oid)
     } else {
         /*
@@ -399,18 +396,19 @@ where
     }
 }
 
-fn load_doc<'a, DB: DocOps<'a> + ?Sized>(
+async fn load_doc<'a, DB: DocOps<'a> + ?Sized>(
     db: &DB,
     oid: OID,
-    txn: &mut TransactionMut,
-) -> Result<u32, Error>
+    doc: yrs::Doc,
+) -> Result<(yrs::Doc, u32), Error>
 where
     Error: From<<DB as KVStore<'a>>::Error>,
 {
+    let mut txn = doc.transact_mut();
     let mut found = false;
     {
         let doc_key = key_doc(oid);
-        if let Some(doc_state) = db.get(&doc_key)? {
+        if let Some(doc_state) = db.get(&doc_key).await? {
             let update = Update::decode_v1(doc_state.as_ref())?;
             txn.apply_update(update);
             found = true;
@@ -431,7 +429,8 @@ where
     if found {
         update_count |= 1 << 31; // mark hi bit to note that document core state was used
     }
-    Ok(update_count)
+    drop(txn);
+    Ok((doc, update_count))
 }
 
 fn delete_updates<'a, DB: DocOps<'a> + ?Sized>(db: &DB, oid: OID) -> Result<(), Error>
@@ -444,7 +443,7 @@ where
     Ok(())
 }
 
-fn flush_doc<'a, DB: DocOps<'a> + ?Sized>(
+async fn flush_doc<'a, DB: DocOps<'a> + ?Sized>(
     db: &DB,
     oid: OID,
     options: yrs::Options,
@@ -453,7 +452,7 @@ where
     Error: From<<DB as KVStore<'a>>::Error>,
 {
     let doc = Doc::with_options(options);
-    let found = load_doc(db, oid, &mut doc.transact_mut())?;
+    let (doc, found) = load_doc(db, oid, doc).await?;
     if found & !(1 << 31) != 0 {
         // loaded doc was generated from updates
         let txn = doc.transact();

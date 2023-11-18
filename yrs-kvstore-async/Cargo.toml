@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.74"
-smallvec = "1.11.2"
+smallvec = { version = "1.11.2", features = ["write"] }
 yrs = "0.17.1"
