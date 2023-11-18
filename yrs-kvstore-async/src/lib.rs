@@ -73,7 +73,7 @@ pub trait KVStore<'a> {
     async fn remove(&self, key: &[u8]) -> Result<(), Self::Error>;
 
     /// Remove all keys between `from`..=`to` range of keys.
-    fn remove_range(&self, from: &[u8], to: &[u8]) -> Result<(), Self::Error>;
+    async fn remove_range(&self, from: &[u8], to: &[u8]) -> Result<(), Self::Error>;
 
     /// Return an iterator over all entries between `from`..=`to` range of keys.
     fn iter_range(&self, from: &[u8], to: &[u8]) -> Result<Self::Cursor, Self::Error>;
@@ -83,7 +83,7 @@ pub trait KVStore<'a> {
     ///
     /// In example: in a key collection of `{1,2,5,7}`, this method with the key parameter of `4`
     /// should return value of `2`.
-    fn peek_back(&self, key: &[u8]) -> Result<Option<Self::Entry>, Self::Error>;
+    async fn peek_back(&self, key: &[u8]) -> Result<Option<Self::Entry>, Self::Error>;
 }
 
 /// Trait used by [KVStore] to define key-value entry tuples returned by cursor iterators.
@@ -222,7 +222,7 @@ where
         let oid = get_or_create_oid(self, name.as_ref()).await?;
         let last_clock = {
             let end = key_update(oid, u32::MAX);
-            if let Some(e) = self.peek_back(&end)? {
+            if let Some(e) = self.peek_back(&end).await? {
                 let last_key = e.key();
                 let len = last_key.len();
                 let last_clock = &last_key[(len - 5)..(len - 1)]; // update key scheme: 01{name:n}1{clock:4}0
@@ -382,7 +382,7 @@ where
            Use 00{0000}0 to try to move cursor to GTE first document, then move cursor 1 position
            back to get the latest OID or not found.
         */
-        let last_oid = if let Some(e) = db.peek_back([V1, KEYSPACE_DOC].as_ref())? {
+        let last_oid = if let Some(e) = db.peek_back([V1, KEYSPACE_DOC].as_ref()).await? {
             let value = e.value();
             let last_value = OID::from_be_bytes(value.try_into().unwrap());
             last_value
@@ -433,13 +433,13 @@ where
     Ok((doc, update_count))
 }
 
-fn delete_updates<'a, DB: DocOps<'a> + ?Sized>(db: &DB, oid: OID) -> Result<(), Error>
+async fn delete_updates<'a, DB: DocOps<'a> + ?Sized>(db: &DB, oid: OID) -> Result<(), Error>
 where
     Error: From<<DB as KVStore<'a>>::Error>,
 {
     let start = key_update(oid, 0);
     let end = key_update(oid, u32::MAX);
-    db.remove_range(&start, &end)?;
+    db.remove_range(&start, &end).await?;
     Ok(())
 }
 
@@ -461,7 +461,7 @@ where
         drop(txn);
 
         insert_inner_v1(db, oid, &doc_state, &state_vec).await?;
-        delete_updates(db, oid)?;
+        delete_updates(db, oid).await?;
         Ok(Some(doc))
     } else {
         Ok(None)
