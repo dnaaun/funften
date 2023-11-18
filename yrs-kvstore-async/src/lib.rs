@@ -70,7 +70,7 @@ pub trait KVStore<'a> {
     async fn upsert(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error>;
 
     /// Return a value stored under the given `key` if it exists.
-    fn remove(&self, key: &[u8]) -> Result<(), Self::Error>;
+    async fn remove(&self, key: &[u8]) -> Result<(), Self::Error>;
 
     /// Remove all keys between `from`..=`to` range of keys.
     fn remove_range(&self, from: &[u8], to: &[u8]) -> Result<(), Self::Error>;
@@ -266,7 +266,7 @@ where
             // all document related elements are stored within bounds [0,1,..oid,0]..[0,1,..oid,255]
             let oid: [u8; 4] = oid.as_ref().try_into().unwrap();
             let oid = OID::from_be_bytes(oid);
-            self.remove(&oid_key)?;
+            self.remove(&oid_key).await?;
             let start = key_doc_start(oid);
             let end = key_doc_end(oid);
             for v in self.iter_range(&start, &end)? {
@@ -274,7 +274,7 @@ where
                 if key > &end {
                     break; //TODO: for some reason key range doesn't always work
                 }
-                self.remove(&key)?;
+                self.remove(&key).await?;
             }
         }
         Ok(())
@@ -322,7 +322,7 @@ where
     ) -> Result<(), Error> {
         if let Some(oid) = get_oid(self, name.as_ref()).await? {
             let key = key_meta(oid, meta_key.as_ref());
-            self.remove(&key)?;
+            self.remove(&key).await?;
         }
         Ok(())
     }
