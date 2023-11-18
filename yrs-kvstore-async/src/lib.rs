@@ -67,7 +67,7 @@ pub trait KVStore<'a> {
 
     /// Insert a new `value` under given `key` or replace an existing value with new one if
     /// entry with that `key` already existed.
-    fn upsert(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error>;
+    async fn upsert(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error>;
 
     /// Return a value stored under the given `key` if it exists.
     fn remove(&self, key: &[u8]) -> Result<(), Self::Error>;
@@ -127,7 +127,7 @@ where
         doc_sv_v1: &[u8],
     ) -> Result<(), Error> {
         let oid = get_or_create_oid(self, name).await?;
-        insert_inner_v1(self, oid, doc_state_v1, doc_sv_v1)?;
+        insert_inner_v1(self, oid, doc_state_v1, doc_sv_v1).await?;
         Ok(())
     }
 
@@ -233,7 +233,7 @@ where
         };
         let clock = last_clock + 1;
         let update_key = key_update(oid, clock);
-        self.upsert(&update_key, &update)?;
+        self.upsert(&update_key, &update).await?;
         Ok(clock)
     }
 
@@ -308,7 +308,7 @@ where
     ) -> Result<(), Error> {
         let oid = get_or_create_oid(self, name.as_ref()).await?;
         let key = key_meta(oid, meta_key.as_ref());
-        self.upsert(&key, meta)?;
+        self.upsert(&key, meta).await?;
         Ok(())
     }
 
@@ -391,7 +391,7 @@ where
         };
         let new_oid = last_oid + 1;
         let key = key_oid(name);
-        db.upsert(&key, new_oid.to_be_bytes().as_ref())?;
+        db.upsert(&key, new_oid.to_be_bytes().as_ref()).await?;
         Ok(new_oid)
     }
 }
@@ -460,7 +460,7 @@ where
         let state_vec = txn.state_vector().encode_v1();
         drop(txn);
 
-        insert_inner_v1(db, oid, &doc_state, &state_vec)?;
+        insert_inner_v1(db, oid, &doc_state, &state_vec).await?;
         delete_updates(db, oid)?;
         Ok(Some(doc))
     } else {
@@ -468,7 +468,7 @@ where
     }
 }
 
-fn insert_inner_v1<'a, DB: DocOps<'a> + ?Sized>(
+async fn insert_inner_v1<'a, DB: DocOps<'a> + ?Sized>(
     db: &DB,
     oid: OID,
     doc_state_v1: &[u8],
@@ -479,8 +479,8 @@ where
 {
     let key_doc = key_doc(oid);
     let key_sv = key_state_vector(oid);
-    db.upsert(&key_doc, doc_state_v1)?;
-    db.upsert(&key_sv, doc_sv_v1)?;
+    db.upsert(&key_doc, doc_state_v1).await?;
+    db.upsert(&key_sv, doc_sv_v1).await?;
     Ok(())
 }
 
