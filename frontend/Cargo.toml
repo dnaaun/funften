@@ -33,7 +33,7 @@ web-sys = {version = "*", features = [
 ] }
 wire = { path = "../wire" }
 yrs_wrappers = { path = "../yrs_wrappers" }
-yrs = { path = "../../../y-crdt/yrs/"}
+yrs = { path = "../../y-crdt/yrs/"}
 itertools = "0.10.5"
 slotmap = "1.0.6"
 wasm-bindgen-futures = "*"
