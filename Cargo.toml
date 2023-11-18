@@ -6,5 +6,6 @@ members = [
 "yrs_wrappers",
 "yrs_struct_derive",
 "core_logic",
-"funften_org"
+"funften_org",
+"yrs-indexeddb"
 ]

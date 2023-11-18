@@ -3245,6 +3245,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "yrs-indexeddb"
+version = "0.1.0"
+
+[[package]]
 name = "yrs_struct_derive"
 version = "0.1.0"
 dependencies = [
