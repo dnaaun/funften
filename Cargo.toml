@@ -8,4 +8,4 @@ members = [
 "core_logic",
 "funften_org",
 "yrs-indexeddb"
-]
+, "yrs-kvstore-async"]

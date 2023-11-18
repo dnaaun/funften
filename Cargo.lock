@@ -68,9 +68,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.68"
+version = "0.1.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
+checksum = "a66537f1bb974b254c98ed142ff995236e81b9d0fe4db0575f46612cb15eb0f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2378,10 +2378,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "smallvec"
-version = "1.10.0"
+name = "smallstr"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
+checksum = "63b1aefdf380735ff8ded0b15f31aab05daf1f70216c01c02a12926badd1df9d"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
+name = "smallvec"
+version = "1.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
 
 [[package]]
 name = "socket2"
@@ -3225,7 +3234,7 @@ dependencies = [
  "atomic_refcell",
  "lib0 0.16.5",
  "rand 0.7.3",
- "smallstr",
+ "smallstr 0.2.0",
  "smallvec",
  "thiserror",
 ]
@@ -3239,7 +3248,22 @@ dependencies = [
  "atomic_refcell",
  "lib0 0.16.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.3",
- "smallstr",
+ "smallstr 0.2.0",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "yrs"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86f2fbea97ed32722d4f09fcf1aace9daf36e8b2e72b1f605d5a1bee575fa0da"
+dependencies = [
+ "atomic_refcell",
+ "rand 0.7.3",
+ "serde",
+ "serde_json",
+ "smallstr 0.3.0",
  "smallvec",
  "thiserror",
 ]
@@ -3247,6 +3271,30 @@ dependencies = [
 [[package]]
 name = "yrs-indexeddb"
 version = "0.1.0"
+dependencies = [
+ "yrs-kvstore",
+]
+
+[[package]]
+name = "yrs-kvstore"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be867aba0de4ae4c1f1d044ff56866a46ceff27ff3b1a2cfa1224d1bf0de1fc3"
+dependencies = [
+ "lib0 0.16.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smallvec",
+ "thiserror",
+ "yrs 0.17.1",
+]
+
+[[package]]
+name = "yrs-kvstore-async"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "smallvec",
+ "yrs 0.17.1",
+]
 
 [[package]]
 name = "yrs_struct_derive"
