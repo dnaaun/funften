@@ -48,6 +48,7 @@ use std::convert::TryInto;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
+use futures::stream::Stream;
 
 /// A trait to be implemented by the specific key-value store transaction equivalent in order to
 /// auto-implement features provided by [DocOps] trait.
@@ -76,7 +77,7 @@ pub trait KVStore<'a> {
     async fn remove_range(&self, from: &[u8], to: &[u8]) -> Result<(), Self::Error>;
 
     /// Return an iterator over all entries between `from`..=`to` range of keys.
-    fn iter_range(&self, from: &[u8], to: &[u8]) -> Result<Self::Cursor, Self::Error>;
+    async fn iter_range(&self, from: &[u8], to: &[u8]) -> Result<Self::Cursor, Self::Error>;
 
     /// Looks into the last entry value prior to a given key. The provided key parameter may not
     /// exist and it's used only to establish cursor position in ordered key collection.
@@ -202,7 +203,7 @@ where
             };
             let update_range_start = key_update(oid, 0);
             let update_range_end = key_update(oid, u32::MAX);
-            let mut iter = self.iter_range(&update_range_start, &update_range_end)?;
+            let mut iter = self.iter_range(&update_range_start, &update_range_end).await?;
             let up_to_date = iter.next().is_none();
             Ok((sv, up_to_date))
         } else {
@@ -269,7 +270,7 @@ where
             self.remove(&oid_key).await?;
             let start = key_doc_start(oid);
             let end = key_doc_end(oid);
-            for v in self.iter_range(&start, &end)? {
+            for v in self.iter_range(&start, &end).await? {
                 let key: &[u8] = v.key();
                 if key > &end {
                     break; //TODO: for some reason key range doesn't always work
@@ -328,10 +329,10 @@ where
     }
 
     /// Returns an iterator over all document names stored in current database.
-    fn iter_docs(&self) -> Result<DocsNameIter<Self::Cursor, Self::Entry>, Error> {
+    async fn iter_docs(&self) -> Result<DocsNameIter<Self::Cursor, Self::Entry>, Error> {
         let start = Key::from_const([V1, KEYSPACE_OID]);
         let end = Key::from_const([V1, KEYSPACE_DOC]);
-        let cursor = self.iter_range(&start, &end)?;
+        let cursor = self.iter_range(&start, &end).await?;
         Ok(DocsNameIter { cursor, start, end })
     }
 
@@ -343,7 +344,7 @@ where
         if let Some(oid) = get_oid(self, doc_name.as_ref()).await? {
             let start = key_meta_start(oid).to_vec();
             let end = key_meta_end(oid).to_vec();
-            let cursor = self.iter_range(&start, &end)?;
+            let cursor = self.iter_range(&start, &end).await?;
             Ok(MetadataIter(Some((cursor, start, end))))
         } else {
             Ok(MetadataIter(None))
@@ -418,7 +419,7 @@ where
     {
         let update_key_start = key_update(oid, 0);
         let update_key_end = key_update(oid, u32::MAX);
-        let mut iter = db.iter_range(&update_key_start, &update_key_end)?;
+        let mut iter = db.iter_range(&update_key_start, &update_key_end).await?;
         while let Some(e) = iter.next() {
             let value = e.value();
             let update = Update::decode_v1(value)?;
