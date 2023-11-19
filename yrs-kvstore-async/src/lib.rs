@@ -44,11 +44,14 @@ use crate::keys::{
     doc_oid_name, key_doc, key_doc_end, key_doc_start, key_meta, key_meta_end, key_meta_start,
     key_oid, key_state_vector, key_update, Key, KEYSPACE_DOC, KEYSPACE_OID, OID, V1,
 };
+use futures::stream::{Stream, StreamExt};
+use pin_project::pin_project;
 use std::convert::TryInto;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{Doc, ReadTxn, StateVector, Transact, TransactionMut, Update};
-use futures::stream::Stream;
 
 /// A trait to be implemented by the specific key-value store transaction equivalent in order to
 /// auto-implement features provided by [DocOps] trait.
@@ -56,7 +59,7 @@ pub trait KVStore<'a> {
     /// Error type returned from the implementation.
     type Error: std::error::Error;
     /// Cursor type used to iterate over the ordered range of key-value entries.
-    type Cursor: Iterator<Item = Self::Entry>;
+    type Cursor: Stream<Item = Self::Entry> + Unpin;
     /// Entry type returned by cursor.
     type Entry: KVEntry;
     /// Type returned from the implementation. Different key-value stores have different
@@ -111,7 +114,9 @@ where
     ) -> Result<(), Error> {
         let doc_state = txn.encode_diff_v1(&StateVector::default());
         let state_vector = txn.state_vector().encode_v1();
-        Ok(self.insert_doc_raw_v1(name.as_ref(), &doc_state, &state_vector).await?)
+        Ok(self
+            .insert_doc_raw_v1(name.as_ref(), &doc_state, &state_vector)
+            .await?)
     }
 
     /// Inserts or updates a document given it's binary update and state vector. lib0 v1 encoding is
@@ -203,8 +208,10 @@ where
             };
             let update_range_start = key_update(oid, 0);
             let update_range_end = key_update(oid, u32::MAX);
-            let mut iter = self.iter_range(&update_range_start, &update_range_end).await?;
-            let up_to_date = iter.next().is_none();
+            let mut cursor = self
+                .iter_range(&update_range_start, &update_range_end)
+                .await?;
+            let up_to_date = cursor.next().await.is_none();
             Ok((sv, up_to_date))
         } else {
             Ok((None, true))
@@ -219,7 +226,11 @@ where
     /// pruned (using [Self::flush_doc] method), sequence number is reset.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    async fn push_update<K: AsRef<[u8]> + ?Sized>(&self, name: &K, update: &[u8]) -> Result<u32, Error> {
+    async fn push_update<K: AsRef<[u8]> + ?Sized>(
+        &self,
+        name: &K,
+        update: &[u8],
+    ) -> Result<u32, Error> {
         let oid = get_or_create_oid(self, name.as_ref()).await?;
         let last_clock = {
             let end = key_update(oid, u32::MAX);
@@ -248,9 +259,7 @@ where
         sv: &StateVector,
     ) -> Result<Option<Vec<u8>>, Error> {
         let doc = Doc::new();
-        let (doc, found) = {
-            self.load_doc(name, doc).await?
-        };
+        let (doc, found) = { self.load_doc(name, doc).await? };
         if found {
             Ok(Some(doc.transact().encode_diff_v1(sv)))
         } else {
@@ -270,7 +279,9 @@ where
             self.remove(&oid_key).await?;
             let start = key_doc_start(oid);
             let end = key_doc_end(oid);
-            for v in self.iter_range(&start, &end).await? {
+
+            let mut cursor = self.iter_range(&start, &end).await?;
+            while let Some(v) = cursor.next().await {
                 let key: &[u8] = v.key();
                 if key > &end {
                     break; //TODO: for some reason key range doesn't always work
@@ -345,7 +356,7 @@ where
             let start = key_meta_start(oid).to_vec();
             let end = key_meta_end(oid).to_vec();
             let cursor = self.iter_range(&start, &end).await?;
-            Ok(MetadataIter(Some((cursor, start, end))))
+            Ok(MetadataIter(Some(MetadataIterInner(cursor, start, end))))
         } else {
             Ok(MetadataIter(None))
         }
@@ -420,7 +431,7 @@ where
         let update_key_start = key_update(oid, 0);
         let update_key_end = key_update(oid, u32::MAX);
         let mut iter = db.iter_range(&update_key_start, &update_key_end).await?;
-        while let Some(e) = iter.next() {
+        while let Some(e) = iter.next().await {
             let value = e.value();
             let update = Update::decode_v1(value)?;
             txn.apply_update(update);
@@ -485,47 +496,66 @@ where
     Ok(())
 }
 
-pub struct DocsNameIter<I, E>
+#[pin_project]
+pub struct DocsNameIter<S, E>
 where
-    I: Iterator<Item = E>,
+    S: Stream<Item = E>,
     E: KVEntry,
 {
-    cursor: I,
+    #[pin]
+    cursor: S,
     start: Key<2>,
     end: Key<2>,
 }
 
-impl<I, E> Iterator for DocsNameIter<I, E>
+impl<S, E> Stream for DocsNameIter<S, E>
 where
-    I: Iterator<Item = E>,
+    S: Stream<Item = E>,
     E: KVEntry,
 {
     type Item = Box<[u8]>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let e = self.cursor.next()?;
-        Some(doc_oid_name(e.key()).into())
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.project()
+            .cursor
+            .poll_next(cx)
+            .map(|e| e.map(|e| doc_oid_name(e.key()).into()))
     }
 }
 
-pub struct MetadataIter<I, E>(Option<(I, Vec<u8>, Vec<u8>)>)
+#[pin_project]
+struct MetadataIterInner<S, E>(#[pin] S, Vec<u8>, Vec<u8>)
 where
-    I: Iterator<Item = E>,
+    S: Stream<Item = E>,
     E: KVEntry;
 
-impl<I, E> Iterator for MetadataIter<I, E>
+#[pin_project]
+pub struct MetadataIter<S, E>(#[pin] Option<MetadataIterInner<S, E>>)
 where
-    I: Iterator<Item = E>,
+    S: Stream<Item = E>,
+    E: KVEntry;
+
+impl<S, E> Stream for MetadataIter<S, E>
+where
+    S: Stream<Item = E>,
     E: KVEntry,
 {
     type Item = (Box<[u8]>, Box<[u8]>);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let (cursor, _, _) = self.0.as_mut()?;
-        let v = cursor.next()?;
-        let key = v.key();
-        let value = v.value();
-        let meta_key = &key[7..key.len() - 1];
-        Some((meta_key.into(), value.into()))
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let inner = this.0.as_pin_mut();
+        let inner = match inner {
+            None => return Poll::Ready(None),
+            Some(inner) => inner,
+        };
+        let cursor = inner.project().0;
+        cursor.poll_next(cx).map(|v| {
+            let v = v?;
+            let key = v.key();
+            let value = v.value();
+            let meta_key = &key[7..key.len() - 1];
+            Some((meta_key.into(), value.into()))
+        })
     }
 }
