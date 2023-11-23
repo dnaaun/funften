@@ -219,7 +219,28 @@ impl<'a> KVStore<'a> for IdbStore {
     }
 
     async fn peek_back(&self, key: &[u8]) -> Result<Option<Self::Entry>, Self::Error> {
-        todo!()
+        let txn = self.db.transaction_on_one(&self.object_store_name)?;
+        let object_store = txn.object_store(&self.object_store_name)?;
+
+        let to = js_sys::Uint8Array::from(key);
+        let range = IdbKeyRange::upper_bound(&to.dyn_into::<JsValue>().unwrap()).unwrap();
+        let cursor = object_store
+            .open_cursor_with_range_and_direction(&range, IdbCursorDirection::Prev)?
+            .await?;
+        let cursor = match cursor {
+            None => return Ok(None),
+            Some(cursor) => cursor,
+        };
+        let key = match cursor.key() {
+            None => return Ok(None),
+            Some(key) => key,
+        };
+        let value = cursor.value();
+
+        let key = key.dyn_into::<Uint8Array>().unwrap().to_vec();
+        let value = value.dyn_into::<Uint8Array>().unwrap().to_vec();
+
+        Ok(Some(IdbEntry { key, value }))
     }
 }
 
