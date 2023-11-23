@@ -11,31 +11,32 @@ use js_sys::wasm_bindgen::JsCast;
 use js_sys::{Object, Uint8Array};
 use yrs_kvstore_async::{KVEntry, KVStore};
 
-struct IdbStore {
+struct IdbStore<'a> {
     object_store_name: String,
-    db: IdbDatabase,
+    // db: IdbDatabase,
+    txn: IdbTransaction<'a>,
 }
 
-impl IdbStore {
-    async fn new(db_name: String, object_store: String) -> Result<Self, IdbError> {
-        let mut db_req: OpenDbRequest = IdbDatabase::open_u32(&db_name, 1)?;
+impl<'a> IdbStore<'a> {
+    async fn new(txn: IdbTransaction<'a>, object_store_name: String) -> Result<Self, IdbError> {
+        // let mut db_req: OpenDbRequest = IdbDatabase::open_u32(&db_name, 1)?;
 
-        let object_store2 = object_store.clone();
-        db_req.set_on_upgrade_needed(Some(
-            move |evt: &IdbVersionChangeEvent| -> Result<(), JsValue> {
-                // Check if the object store exists; create it if it doesn't
-                if let None = evt.db().object_store_names().find(|n| n == &object_store2) {
-                    evt.db().create_object_store(&object_store2)?;
-                }
-                Ok(())
-            },
-        ));
+        // let object_store2 = object_store.clone();
+        // db_req.set_on_upgrade_needed(Some(
+        //     move |evt: &IdbVersionChangeEvent| -> Result<(), JsValue> {
+        //         // Check if the object store exists; create it if it doesn't
+        //         if let None = evt.db().object_store_names().find(|n| n == &object_store2) {
+        //             evt.db().create_object_store(&object_store2)?;
+        //         }
+        //         Ok(())
+        //     },
+        // ));
 
-        let db: IdbDatabase = db_req.await?;
+        // let db: IdbDatabase = db_req.await?;
 
         Ok(Self {
-            object_store_name: object_store,
-            db,
+            object_store_name,
+            txn,
         })
     }
 }
@@ -56,7 +57,7 @@ impl KVEntry for IdbEntry {
 }
 
 struct IdbStream<'a> {
-    txn: IdbTransaction<'a>,
+    txn: &'a IdbTransaction<'a>,
     object_store_name: &'a str,
     range: IdbKeyRange,
     object_store: Option<IdbObjectStore<'a>>,
@@ -137,7 +138,7 @@ impl<'a> futures::Stream for IdbStream<'a> {
     }
 }
 
-impl<'a> KVStore<'a> for IdbStore {
+impl<'a> KVStore<'a> for IdbStore<'a> {
     type Error = IdbError;
 
     type Cursor = IdbStream<'a>;
@@ -147,9 +148,7 @@ impl<'a> KVStore<'a> for IdbStore {
     type Return = Vec<u8>;
 
     async fn get(&self, key: &[u8]) -> Result<Option<Self::Return>, Self::Error> {
-        let db = &self.db;
-        let txn = db.transaction_on_one(&self.object_store_name)?;
-        let store = txn.object_store(&self.object_store_name)?;
+        let store = self.txn.object_store(&self.object_store_name)?;
 
         let key = js_sys::Uint8Array::from(key);
         let result = store
@@ -163,29 +162,18 @@ impl<'a> KVStore<'a> for IdbStore {
     }
 
     async fn upsert(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
-        let db = &self.db;
-        let txn = db
-            .transaction_on_one_with_mode(&self.object_store_name, IdbTransactionMode::Readwrite)?;
-        let store = txn.object_store(&self.object_store_name)?;
+        let store = self.txn.object_store(&self.object_store_name)?;
         let key = js_sys::Uint8Array::from(key);
         let value = js_sys::Uint8Array::from(value);
         store.put_key_val(&key, &value)?;
-
-        txn.await.into_result()?;
 
         Ok(())
     }
 
     async fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
-        let db = &self.db;
-        let txn = db
-            .transaction_on_one_with_mode(&self.object_store_name, IdbTransactionMode::Readwrite)?;
-        let store = txn.object_store(&self.object_store_name)?;
+        let store = self.txn.object_store(&self.object_store_name)?;
         let key = js_sys::Uint8Array::from(key);
         store.delete(&key)?;
-
-        txn.await.into_result()?;
-
         Ok(())
     }
 
@@ -203,12 +191,11 @@ impl<'a> KVStore<'a> for IdbStore {
             .unwrap();
         let to = js_sys::Uint8Array::from(to).dyn_into::<JsValue>().unwrap();
 
-        let txn: IdbTransaction<'a> = self.db.transaction_on_one(&self.object_store_name)?;
 
         let range = IdbKeyRange::bound(&from, &to).unwrap();
 
         let mut stream_builder = IdbStream {
-            txn,
+            txn: &self.txn,
             range,
             object_store_name: self.object_store_name.as_str(),
             object_store: None,
@@ -219,8 +206,7 @@ impl<'a> KVStore<'a> for IdbStore {
     }
 
     async fn peek_back(&self, key: &[u8]) -> Result<Option<Self::Entry>, Self::Error> {
-        let txn = self.db.transaction_on_one(&self.object_store_name)?;
-        let object_store = txn.object_store(&self.object_store_name)?;
+        let object_store = self.txn.object_store(&self.object_store_name)?;
 
         let to = js_sys::Uint8Array::from(key);
         let range = IdbKeyRange::upper_bound(&to.dyn_into::<JsValue>().unwrap()).unwrap();
@@ -254,7 +240,9 @@ mod tests {
 
     #[test]
     async fn plain() {
-        let store = IdbStore::new("test".to_owned(), "test".to_owned()).await.unwrap();
+        let store = IdbStore::new("test".to_owned(), "test".to_owned())
+            .await
+            .unwrap();
     }
 
     // #[test]
