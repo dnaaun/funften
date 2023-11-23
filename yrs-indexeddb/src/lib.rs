@@ -244,383 +244,391 @@ impl<'a> KVStore<'a> for IdbStore {
     }
 }
 
-// mod test {
-//     use crate::{DocOps, LmdbStore};
-//     use std::sync::Arc;
-//     use yrs::{Doc, GetString, ReadTxn, Text, Transact};
+#[cfg(test)]
+mod tests {
+    use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
 
-//     #[test]
-//     fn create_get_remove() {
-//         let cleaner = Cleaner::new("lmdb-create_get_remove");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
+    use crate::IdbStore;
 
-//         // insert document
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             text.insert(&mut txn, 0, "hello");
+    wasm_bindgen_test_configure!(run_in_browser);
 
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.insert_doc("doc", &txn).unwrap();
-//             db_txn.commit().unwrap();
-//         }
+    #[test]
+    async fn plain() {
+        let store = IdbStore::new("test".to_owned(), "test".to_owned()).await.unwrap();
+    }
 
-//         // retrieve document
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             let db_txn = env.get_reader().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.load_doc("doc", &mut txn).unwrap();
+    // #[test]
+    // fn create_get_remove() {
+    //     let cleaner = Cleaner::new("lmdb-create_get_remove");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
 
-//             assert_eq!(text.get_string(&txn), "hello");
+    //     // insert document
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         text.insert(&mut txn, 0, "hello");
 
-//             let (sv, completed) = db.get_state_vector("doc").unwrap();
-//             assert_eq!(sv, Some(txn.state_vector()));
-//             assert!(completed);
-//         }
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.insert_doc("doc", &txn).unwrap();
+    //         db_txn.commit().unwrap();
+    //     }
 
-//         // remove document
-//         {
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
+    //     // retrieve document
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         let db_txn = env.get_reader().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.load_doc("doc", &mut txn).unwrap();
 
-//             db.clear_doc("doc").unwrap();
+    //         assert_eq!(text.get_string(&txn), "hello");
 
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             db.load_doc("doc", &mut txn).unwrap();
+    //         let (sv, completed) = db.get_state_vector("doc").unwrap();
+    //         assert_eq!(sv, Some(txn.state_vector()));
+    //         assert!(completed);
+    //     }
 
-//             assert_eq!(text.get_string(&txn), "");
+    //     // remove document
+    //     {
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
 
-//             let (sv, completed) = db.get_state_vector("doc").unwrap();
-//             assert!(sv.is_none());
-//             assert!(completed);
-//         }
-//     }
-//     #[test]
-//     fn multi_insert() {
-//         let cleaner = Cleaner::new("lmdb-multi_insert");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
+    //         db.clear_doc("doc").unwrap();
 
-//         // insert document twice
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             text.push(&mut txn, "hello");
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         db.load_doc("doc", &mut txn).unwrap();
 
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
+    //         assert_eq!(text.get_string(&txn), "");
 
-//             db.insert_doc("doc", &txn).unwrap();
+    //         let (sv, completed) = db.get_state_vector("doc").unwrap();
+    //         assert!(sv.is_none());
+    //         assert!(completed);
+    //     }
+    // }
+    // #[test]
+    // fn multi_insert() {
+    //     let cleaner = Cleaner::new("lmdb-multi_insert");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
 
-//             text.push(&mut txn, " world");
+    //     // insert document twice
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         text.push(&mut txn, "hello");
 
-//             db.insert_doc("doc", &txn).unwrap();
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
 
-//             db_txn.commit().unwrap();
-//         }
+    //         db.insert_doc("doc", &txn).unwrap();
 
-//         // retrieve document
-//         {
-//             let db_txn = env.get_reader().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
+    //         text.push(&mut txn, " world");
 
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             db.load_doc("doc", &mut txn).unwrap();
+    //         db.insert_doc("doc", &txn).unwrap();
 
-//             assert_eq!(text.get_string(&txn), "hello world");
-//         }
-//     }
+    //         db_txn.commit().unwrap();
+    //     }
 
-//     #[test]
-//     fn incremental_updates() {
-//         const DOC_NAME: &str = "doc";
-//         let cleaner = Cleaner::new("lmdb-incremental_updates");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
-//         let env = Arc::new(env);
-//         let h = Arc::new(h);
+    //     // retrieve document
+    //     {
+    //         let db_txn = env.get_reader().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
 
-//         // store document updates
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         db.load_doc("doc", &mut txn).unwrap();
 
-//             let env = env.clone();
-//             let h = h.clone();
-//             let _sub = doc.observe_update_v1(move |_, u| {
-//                 let db_txn = env.new_transaction().unwrap();
-//                 let db = LmdbStore::from(db_txn.bind(&h));
-//                 db.push_update(DOC_NAME, &u.update).unwrap();
-//                 db_txn.commit().unwrap();
-//             });
-//             // generate 3 updates
-//             text.push(&mut doc.transact_mut(), "a");
-//             text.push(&mut doc.transact_mut(), "b");
-//             text.push(&mut doc.transact_mut(), "c");
-//         }
+    //         assert_eq!(text.get_string(&txn), "hello world");
+    //     }
+    // }
 
-//         // load document
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
+    // #[test]
+    // fn incremental_updates() {
+    //     const DOC_NAME: &str = "doc";
+    //     let cleaner = Cleaner::new("lmdb-incremental_updates");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    //     let env = Arc::new(env);
+    //     let h = Arc::new(h);
 
-//             let db_txn = env.get_reader().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.load_doc(DOC_NAME, &mut txn).unwrap();
+    //     // store document updates
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
 
-//             assert_eq!(text.get_string(&txn), "abc");
-//         }
+    //         let env = env.clone();
+    //         let h = h.clone();
+    //         let _sub = doc.observe_update_v1(move |_, u| {
+    //             let db_txn = env.new_transaction().unwrap();
+    //             let db = LmdbStore::from(db_txn.bind(&h));
+    //             db.push_update(DOC_NAME, &u.update).unwrap();
+    //             db_txn.commit().unwrap();
+    //         });
+    //         // generate 3 updates
+    //         text.push(&mut doc.transact_mut(), "a");
+    //         text.push(&mut doc.transact_mut(), "b");
+    //         text.push(&mut doc.transact_mut(), "c");
+    //     }
 
-//         // flush document
-//         {
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             let doc = db.flush_doc(DOC_NAME).unwrap().unwrap();
-//             db_txn.commit().unwrap();
+    //     // load document
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
 
-//             let text = doc.get_or_insert_text("text");
+    //         let db_txn = env.get_reader().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.load_doc(DOC_NAME, &mut txn).unwrap();
 
-//             assert_eq!(text.get_string(&doc.transact()), "abc");
-//         }
-//     }
+    //         assert_eq!(text.get_string(&txn), "abc");
+    //     }
 
-//     #[test]
-//     fn state_vector_updates_only() {
-//         const DOC_NAME: &str = "doc";
-//         let cleaner = Cleaner::new("lmdb-state_vector_updates_only");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
-//         let env = Arc::new(env);
-//         let h = Arc::new(h);
+    //     // flush document
+    //     {
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         let doc = db.flush_doc(DOC_NAME).unwrap().unwrap();
+    //         db_txn.commit().unwrap();
 
-//         // store document updates
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let env = env.clone();
-//             let h = h.clone();
-//             let _sub = doc.observe_update_v1(move |_, u| {
-//                 let db_txn = env.new_transaction().unwrap();
-//                 let db = LmdbStore::from(db_txn.bind(&h));
-//                 db.push_update(DOC_NAME, &u.update).unwrap();
-//                 db_txn.commit().unwrap();
-//             });
-//             // generate 3 updates
-//             text.push(&mut doc.transact_mut(), "a");
-//             text.push(&mut doc.transact_mut(), "b");
-//             text.push(&mut doc.transact_mut(), "c");
+    //         let text = doc.get_or_insert_text("text");
 
-//             let sv = doc.transact().state_vector();
-//             sv
-//         };
+    //         assert_eq!(text.get_string(&doc.transact()), "abc");
+    //     }
+    // }
 
-//         let db_txn = env.get_reader().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
-//         let (sv, completed) = db.get_state_vector(DOC_NAME).unwrap();
-//         assert!(sv.is_none());
-//         assert!(!completed); // since it's not completed, we should recalculate state vector from doc state
-//     }
+    // #[test]
+    // fn state_vector_updates_only() {
+    //     const DOC_NAME: &str = "doc";
+    //     let cleaner = Cleaner::new("lmdb-state_vector_updates_only");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    //     let env = Arc::new(env);
+    //     let h = Arc::new(h);
 
-//     #[test]
-//     fn state_diff_from_updates() {
-//         const DOC_NAME: &str = "doc";
-//         let cleaner = Cleaner::new("lmdb-state_diff_from_updates");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
-//         let env = Arc::new(env);
-//         let h = Arc::new(h);
+    //     // store document updates
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let env = env.clone();
+    //         let h = h.clone();
+    //         let _sub = doc.observe_update_v1(move |_, u| {
+    //             let db_txn = env.new_transaction().unwrap();
+    //             let db = LmdbStore::from(db_txn.bind(&h));
+    //             db.push_update(DOC_NAME, &u.update).unwrap();
+    //             db_txn.commit().unwrap();
+    //         });
+    //         // generate 3 updates
+    //         text.push(&mut doc.transact_mut(), "a");
+    //         text.push(&mut doc.transact_mut(), "b");
+    //         text.push(&mut doc.transact_mut(), "c");
 
-//         let (sv, expected) = {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
+    //         let sv = doc.transact().state_vector();
+    //         sv
+    //     };
 
-//             let env = env.clone();
-//             let h = h.clone();
-//             let _sub = doc.observe_update_v1(move |_, u| {
-//                 let db_txn = env.new_transaction().unwrap();
-//                 let db = LmdbStore::from(db_txn.bind(&h));
-//                 db.push_update(DOC_NAME, &u.update).unwrap();
-//                 db_txn.commit().unwrap();
-//             });
+    //     let db_txn = env.get_reader().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
+    //     let (sv, completed) = db.get_state_vector(DOC_NAME).unwrap();
+    //     assert!(sv.is_none());
+    //     assert!(!completed); // since it's not completed, we should recalculate state vector from doc state
+    // }
 
-//             // generate 3 updates
-//             text.push(&mut doc.transact_mut(), "a");
-//             text.push(&mut doc.transact_mut(), "b");
-//             let sv = doc.transact().state_vector();
-//             text.push(&mut doc.transact_mut(), "c");
-//             let update = doc.transact().encode_diff_v1(&sv);
-//             (sv, update)
-//         };
+    // #[test]
+    // fn state_diff_from_updates() {
+    //     const DOC_NAME: &str = "doc";
+    //     let cleaner = Cleaner::new("lmdb-state_diff_from_updates");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    //     let env = Arc::new(env);
+    //     let h = Arc::new(h);
 
-//         let db_txn = env.get_reader().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
-//         let actual = db.get_diff(DOC_NAME, &sv).unwrap();
-//         assert_eq!(actual, Some(expected));
-//     }
+    //     let (sv, expected) = {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
 
-//     #[test]
-//     fn state_diff_from_doc() {
-//         const DOC_NAME: &str = "doc";
-//         let cleaner = Cleaner::new("lmdb-state_diff_from_doc");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
+    //         let env = env.clone();
+    //         let h = h.clone();
+    //         let _sub = doc.observe_update_v1(move |_, u| {
+    //             let db_txn = env.new_transaction().unwrap();
+    //             let db = LmdbStore::from(db_txn.bind(&h));
+    //             db.push_update(DOC_NAME, &u.update).unwrap();
+    //             db_txn.commit().unwrap();
+    //         });
 
-//         let (sv, expected) = {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             // generate 3 updates
-//             text.push(&mut doc.transact_mut(), "a");
-//             text.push(&mut doc.transact_mut(), "b");
-//             let sv = doc.transact().state_vector();
-//             text.push(&mut doc.transact_mut(), "c");
-//             let update = doc.transact().encode_diff_v1(&sv);
+    //         // generate 3 updates
+    //         text.push(&mut doc.transact_mut(), "a");
+    //         text.push(&mut doc.transact_mut(), "b");
+    //         let sv = doc.transact().state_vector();
+    //         text.push(&mut doc.transact_mut(), "c");
+    //         let update = doc.transact().encode_diff_v1(&sv);
+    //         (sv, update)
+    //     };
 
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.insert_doc(DOC_NAME, &doc.transact()).unwrap();
-//             db_txn.commit().unwrap();
+    //     let db_txn = env.get_reader().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
+    //     let actual = db.get_diff(DOC_NAME, &sv).unwrap();
+    //     assert_eq!(actual, Some(expected));
+    // }
 
-//             (sv, update)
-//         };
+    // #[test]
+    // fn state_diff_from_doc() {
+    //     const DOC_NAME: &str = "doc";
+    //     let cleaner = Cleaner::new("lmdb-state_diff_from_doc");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
 
-//         let db_txn = env.get_reader().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
-//         let actual = db.get_diff(DOC_NAME, &sv).unwrap();
-//         assert_eq!(actual, Some(expected));
-//     }
+    //     let (sv, expected) = {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         // generate 3 updates
+    //         text.push(&mut doc.transact_mut(), "a");
+    //         text.push(&mut doc.transact_mut(), "b");
+    //         let sv = doc.transact().state_vector();
+    //         text.push(&mut doc.transact_mut(), "c");
+    //         let update = doc.transact().encode_diff_v1(&sv);
 
-//     #[test]
-//     fn doc_meta() {
-//         const DOC_NAME: &str = "doc";
-//         let cleaner = Cleaner::new("lmdb-doc_meta");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.insert_doc(DOC_NAME, &doc.transact()).unwrap();
+    //         db_txn.commit().unwrap();
 
-//         let db_txn = env.new_transaction().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
-//         let value = db.get_meta(DOC_NAME, "key").unwrap();
-//         assert!(value.is_none());
-//         db.insert_meta(DOC_NAME, "key", "value1".as_bytes())
-//             .unwrap();
-//         db_txn.commit().unwrap();
+    //         (sv, update)
+    //     };
 
-//         let db_txn = env.new_transaction().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
-//         let prev = db.get_meta(DOC_NAME, "key").unwrap().map(Vec::from);
-//         db.insert_meta(DOC_NAME, "key", "value2".as_bytes())
-//             .unwrap();
-//         db_txn.commit().unwrap();
-//         assert_eq!(prev.as_deref(), Some("value1".as_bytes()));
+    //     let db_txn = env.get_reader().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
+    //     let actual = db.get_diff(DOC_NAME, &sv).unwrap();
+    //     assert_eq!(actual, Some(expected));
+    // }
 
-//         let db_txn = env.new_transaction().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
-//         let prev = db.get_meta(DOC_NAME, "key").unwrap().map(Vec::from);
-//         db.remove_meta(DOC_NAME, "key").unwrap();
-//         assert_eq!(prev.as_deref(), Some("value2".as_bytes()));
-//         let value = db.get_meta(DOC_NAME, "key").unwrap();
-//         assert!(value.is_none());
-//     }
+    // #[test]
+    // fn doc_meta() {
+    //     const DOC_NAME: &str = "doc";
+    //     let cleaner = Cleaner::new("lmdb-doc_meta");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
 
-//     #[test]
-//     fn doc_meta_iter() {
-//         let cleaner = Cleaner::new("lmdb-doc_meta_iter");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
-//         let db_txn = env.new_transaction().unwrap();
-//         let db = LmdbStore::from(db_txn.bind(&h));
+    //     let db_txn = env.new_transaction().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
+    //     let value = db.get_meta(DOC_NAME, "key").unwrap();
+    //     assert!(value.is_none());
+    //     db.insert_meta(DOC_NAME, "key", "value1".as_bytes())
+    //         .unwrap();
+    //     db_txn.commit().unwrap();
 
-//         db.insert_meta("A", "key1", [1].as_ref()).unwrap();
-//         db.insert_meta("B", "key2", [2].as_ref()).unwrap();
-//         db.insert_meta("B", "key3", [3].as_ref()).unwrap();
-//         db.insert_meta("C", "key4", [4].as_ref()).unwrap();
+    //     let db_txn = env.new_transaction().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
+    //     let prev = db.get_meta(DOC_NAME, "key").unwrap().map(Vec::from);
+    //     db.insert_meta(DOC_NAME, "key", "value2".as_bytes())
+    //         .unwrap();
+    //     db_txn.commit().unwrap();
+    //     assert_eq!(prev.as_deref(), Some("value1".as_bytes()));
 
-//         let mut i = db.iter_meta("B").unwrap();
-//         assert_eq!(i.next(), Some(("key2".as_bytes().into(), [2].into())));
-//         assert_eq!(i.next(), Some(("key3".as_bytes().into(), [3].into())));
-//         assert!(i.next().is_none());
-//     }
+    //     let db_txn = env.new_transaction().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
+    //     let prev = db.get_meta(DOC_NAME, "key").unwrap().map(Vec::from);
+    //     db.remove_meta(DOC_NAME, "key").unwrap();
+    //     assert_eq!(prev.as_deref(), Some("value2".as_bytes()));
+    //     let value = db.get_meta(DOC_NAME, "key").unwrap();
+    //     assert!(value.is_none());
+    // }
 
-//     #[test]
-//     fn doc_iter() {
-//         let cleaner = Cleaner::new("lmdb-doc_iter");
-//         let env = init_env(cleaner.dir());
-//         let h = env.create_db("yrs", DbCreate).unwrap();
-//         let env = Arc::new(env);
-//         let h = Arc::new(h);
+    // #[test]
+    // fn doc_meta_iter() {
+    //     let cleaner = Cleaner::new("lmdb-doc_meta_iter");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    //     let db_txn = env.new_transaction().unwrap();
+    //     let db = LmdbStore::from(db_txn.bind(&h));
 
-//         // insert metadata
-//         {
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.insert_meta("A", "key1", [1].as_ref()).unwrap();
-//             db_txn.commit().unwrap();
-//         }
+    //     db.insert_meta("A", "key1", [1].as_ref()).unwrap();
+    //     db.insert_meta("B", "key2", [2].as_ref()).unwrap();
+    //     db.insert_meta("B", "key3", [3].as_ref()).unwrap();
+    //     db.insert_meta("C", "key4", [4].as_ref()).unwrap();
 
-//         // insert full doc state
-//         {
-//             let doc = Doc::new();
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             text.push(&mut txn, "hello world");
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.insert_doc("B", &txn).unwrap();
-//             db_txn.commit().unwrap();
-//         }
+    //     let mut i = db.iter_meta("B").unwrap();
+    //     assert_eq!(i.next(), Some(("key2".as_bytes().into(), [2].into())));
+    //     assert_eq!(i.next(), Some(("key3".as_bytes().into(), [3].into())));
+    //     assert!(i.next().is_none());
+    // }
 
-//         // insert update
-//         {
-//             let doc = Doc::new();
-//             let env = env.clone();
-//             let h = h.clone();
-//             let _sub = doc.observe_update_v1(move |_, u| {
-//                 let db_txn = env.new_transaction().unwrap();
-//                 let db = LmdbStore::from(db_txn.bind(&h));
-//                 db.push_update("C", &u.update).unwrap();
-//                 db_txn.commit().unwrap();
-//             });
-//             let text = doc.get_or_insert_text("text");
-//             let mut txn = doc.transact_mut();
-//             text.push(&mut txn, "hello world");
-//         }
+    // #[test]
+    // fn doc_iter() {
+    //     let cleaner = Cleaner::new("lmdb-doc_iter");
+    //     let env = init_env(cleaner.dir());
+    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    //     let env = Arc::new(env);
+    //     let h = Arc::new(h);
 
-//         {
-//             let db_txn = env.get_reader().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             let mut i = db.iter_docs().unwrap();
-//             assert_eq!(i.next(), Some("A".as_bytes().into()));
-//             assert_eq!(i.next(), Some("B".as_bytes().into()));
-//             assert_eq!(i.next(), Some("C".as_bytes().into()));
-//             assert!(i.next().is_none());
-//         }
+    //     // insert metadata
+    //     {
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.insert_meta("A", "key1", [1].as_ref()).unwrap();
+    //         db_txn.commit().unwrap();
+    //     }
 
-//         // clear doc
-//         {
-//             let db_txn = env.new_transaction().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             db.clear_doc("B").unwrap();
-//             db_txn.commit().unwrap();
-//         }
+    //     // insert full doc state
+    //     {
+    //         let doc = Doc::new();
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         text.push(&mut txn, "hello world");
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.insert_doc("B", &txn).unwrap();
+    //         db_txn.commit().unwrap();
+    //     }
 
-//         {
-//             let db_txn = env.get_reader().unwrap();
-//             let db = LmdbStore::from(db_txn.bind(&h));
-//             let mut i = db.iter_docs().unwrap();
-//             assert_eq!(i.next(), Some("A".as_bytes().into()));
-//             assert_eq!(i.next(), Some("C".as_bytes().into()));
-//             assert!(i.next().is_none());
-//         }
-//     }
-// }
+    //     // insert update
+    //     {
+    //         let doc = Doc::new();
+    //         let env = env.clone();
+    //         let h = h.clone();
+    //         let _sub = doc.observe_update_v1(move |_, u| {
+    //             let db_txn = env.new_transaction().unwrap();
+    //             let db = LmdbStore::from(db_txn.bind(&h));
+    //             db.push_update("C", &u.update).unwrap();
+    //             db_txn.commit().unwrap();
+    //         });
+    //         let text = doc.get_or_insert_text("text");
+    //         let mut txn = doc.transact_mut();
+    //         text.push(&mut txn, "hello world");
+    //     }
+
+    //     {
+    //         let db_txn = env.get_reader().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         let mut i = db.iter_docs().unwrap();
+    //         assert_eq!(i.next(), Some("A".as_bytes().into()));
+    //         assert_eq!(i.next(), Some("B".as_bytes().into()));
+    //         assert_eq!(i.next(), Some("C".as_bytes().into()));
+    //         assert!(i.next().is_none());
+    //     }
+
+    //     // clear doc
+    //     {
+    //         let db_txn = env.new_transaction().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         db.clear_doc("B").unwrap();
+    //         db_txn.commit().unwrap();
+    //     }
+
+    //     {
+    //         let db_txn = env.get_reader().unwrap();
+    //         let db = LmdbStore::from(db_txn.bind(&h));
+    //         let mut i = db.iter_docs().unwrap();
+    //         assert_eq!(i.next(), Some("A".as_bytes().into()));
+    //         assert_eq!(i.next(), Some("C".as_bytes().into()));
+    //         assert!(i.next().is_none());
+    //     }
+    // }
+}

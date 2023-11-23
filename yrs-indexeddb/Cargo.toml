@@ -8,4 +8,6 @@ edition = "2021"
 [dependencies]
 futures = "0.3.29"
 indexed_db_futures = "0.4.1"
+js-sys = "0.3.65"
+wasm-bindgen-test = "0.3.38"
 yrs-kvstore-async = { path = "../yrs-kvstore-async" }

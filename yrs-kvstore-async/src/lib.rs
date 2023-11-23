@@ -1,3 +1,4 @@
+#![allow(warnings)]
 //! yrs-kvstore-async is a generic library that allows to quickly implement
 //! [Yrs](https://docs.rs/yrs/latest/yrs/index.html) specific document operations over any kind
 //! of asynchronous persistent key-value store. For the synchronous version, please visit
@@ -80,7 +81,11 @@ pub trait KVStore<'a> {
     async fn remove_range(&self, from: &[u8], to: &[u8]) -> Result<(), Self::Error>;
 
     /// Return an iterator over all entries between `from`..=`to` range of keys.
-    async fn iter_range(&self, from: &[u8], to: &[u8]) -> Result<Self::Cursor, Self::Error>;
+    async fn iter_range<'b>(
+        &'a self,
+        from: &'b [u8],
+        to: &'b [u8],
+    ) -> Result<Self::Cursor, Self::Error>;
 
     /// Looks into the last entry value prior to a given key. The provided key parameter may not
     /// exist and it's used only to establish cursor position in ordered key collection.
@@ -142,9 +147,9 @@ where
     /// entries that may not have been merged with the main document state yet.
     ///
     /// This feature requires only a read capabilities from the database transaction.
-    async fn load_doc<K: AsRef<[u8]> + ?Sized>(
-        &self,
-        name: &K,
+    async fn load_doc<'b, K: AsRef<[u8]> + ?Sized>(
+        &'a self,
+        name: &'b K,
         doc: yrs::Doc,
     ) -> Result<(yrs::Doc, bool), Error> {
         if let Some(oid) = get_oid(self, name.as_ref()).await? {
@@ -160,7 +165,10 @@ where
     /// been integrated this way. Returns the [Doc] with the most recent state produced this way.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    async fn flush_doc<K: AsRef<[u8]> + ?Sized>(&self, name: &K) -> Result<Option<Doc>, Error> {
+    async fn flush_doc<'b, K: AsRef<[u8]> + ?Sized>(
+        &'a self,
+        name: &'b K,
+    ) -> Result<Option<Doc>, Error> {
         Ok(self.flush_doc_with(name, yrs::Options::default()).await?)
     }
 
@@ -171,9 +179,9 @@ where
     /// `options` parameter.
     ///
     /// This feature requires a write capabilities from the database transaction.
-    async fn flush_doc_with<K: AsRef<[u8]> + ?Sized>(
-        &self,
-        name: &K,
+    async fn flush_doc_with<'b, K: AsRef<[u8]> + ?Sized>(
+        &'a self,
+        name: &'b K,
         options: yrs::Options,
     ) -> Result<Option<Doc>, Error> {
         if let Some(oid) = get_oid(self, name.as_ref()).await? {
@@ -193,9 +201,9 @@ where
     /// updates using either [Self::load_doc] (read-only) or [Self::flush_doc] (read-write).
     ///
     /// This feature requires only the read capabilities from the database transaction.
-    async fn get_state_vector<K: AsRef<[u8]> + ?Sized>(
-        &self,
-        name: &K,
+    async fn get_state_vector<'b, K: AsRef<[u8]> + ?Sized>(
+        &'a self,
+        name: &'b K,
     ) -> Result<(Option<StateVector>, bool), Error> {
         if let Some(oid) = get_oid(self, name.as_ref()).await? {
             let key = key_state_vector(oid);
@@ -253,9 +261,9 @@ where
     /// happened since provided state vector for a given document.
     ///
     /// This feature requires only the read capabilities from the database transaction.
-    async fn get_diff<K: AsRef<[u8]> + ?Sized>(
-        &self,
-        name: &K,
+    async fn get_diff<'b, K: AsRef<[u8]> + ?Sized>(
+        &'a self,
+        name: &'b K,
         sv: &StateVector,
     ) -> Result<Option<Vec<u8>>, Error> {
         let doc = Doc::new();
@@ -270,7 +278,7 @@ where
     /// Removes all data associated with the current document (including its updates and metadata).
     ///
     /// This feature requires a write capabilities from the database transaction.
-    async fn clear_doc<K: AsRef<[u8]> + ?Sized>(&self, name: &K) -> Result<(), Error> {
+    async fn clear_doc<'b, K: AsRef<[u8]> + ?Sized>(&'a self, name: &'b K) -> Result<(), Error> {
         let oid_key = key_oid(name.as_ref());
         if let Some(oid) = self.get(&oid_key).await? {
             // all document related elements are stored within bounds [0,1,..oid,0]..[0,1,..oid,255]
@@ -340,7 +348,7 @@ where
     }
 
     /// Returns an iterator over all document names stored in current database.
-    async fn iter_docs(&self) -> Result<DocsNameIter<Self::Cursor, Self::Entry>, Error> {
+    async fn iter_docs(&'a self) -> Result<DocsNameIter<Self::Cursor, Self::Entry>, Error> {
         let start = Key::from_const([V1, KEYSPACE_OID]);
         let end = Key::from_const([V1, KEYSPACE_DOC]);
         let cursor = self.iter_range(&start, &end).await?;
@@ -348,9 +356,9 @@ where
     }
 
     /// Returns an iterator over all metadata entries stored for a given document.
-    async fn iter_meta<K: AsRef<[u8]> + ?Sized>(
-        &self,
-        doc_name: &K,
+    async fn iter_meta<'b, K: AsRef<[u8]> + ?Sized>(
+        &'a self,
+        doc_name: &'b K,
     ) -> Result<MetadataIter<Self::Cursor, Self::Entry>, Error> {
         if let Some(oid) = get_oid(self, doc_name.as_ref()).await? {
             let start = key_meta_start(oid).to_vec();
@@ -409,7 +417,7 @@ where
 }
 
 async fn load_doc<'a, DB: DocOps<'a> + ?Sized>(
-    db: &DB,
+    db: &'a DB,
     oid: OID,
     doc: yrs::Doc,
 ) -> Result<(yrs::Doc, u32), Error>
@@ -456,7 +464,7 @@ where
 }
 
 async fn flush_doc<'a, DB: DocOps<'a> + ?Sized>(
-    db: &DB,
+    db: &'a DB,
     oid: OID,
     options: yrs::Options,
 ) -> Result<Option<Doc>, Error>
