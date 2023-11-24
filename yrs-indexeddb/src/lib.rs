@@ -591,37 +591,55 @@ mod tests {
         .await
     }
 
-    // #[test]
-    // fn doc_meta() {
-    //     const DOC_NAME: &str = "doc";
-    //     let cleaner = Cleaner::new("lmdb-doc_meta");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    #[test]
+    async fn doc_meta() -> IResult<()> {
+        const DOC_NAME: &str = "doc";
 
-    //     let db_txn = env.new_transaction().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
-    //     let value = db.get_meta(DOC_NAME, "key").unwrap();
-    //     assert!(value.is_none());
-    //     db.insert_meta(DOC_NAME, "key", "value1".as_bytes())
-    //         .unwrap();
-    //     db_txn.commit().unwrap();
+        with_idb(move |db| async move {
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+            let value = store.get_meta(DOC_NAME, "key").await.unwrap();
+            assert!(value.is_none());
+            store
+                .insert_meta(DOC_NAME, "key", "value1".as_bytes())
+                .await
+                .unwrap();
+            db_txn.await.into_result()?;
 
-    //     let db_txn = env.new_transaction().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
-    //     let prev = db.get_meta(DOC_NAME, "key").unwrap().map(Vec::from);
-    //     db.insert_meta(DOC_NAME, "key", "value2".as_bytes())
-    //         .unwrap();
-    //     db_txn.commit().unwrap();
-    //     assert_eq!(prev.as_deref(), Some("value1".as_bytes()));
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
 
-    //     let db_txn = env.new_transaction().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
-    //     let prev = db.get_meta(DOC_NAME, "key").unwrap().map(Vec::from);
-    //     db.remove_meta(DOC_NAME, "key").unwrap();
-    //     assert_eq!(prev.as_deref(), Some("value2".as_bytes()));
-    //     let value = db.get_meta(DOC_NAME, "key").unwrap();
-    //     assert!(value.is_none());
-    // }
+            let prev = store
+                .get_meta(DOC_NAME, "key")
+                .await
+                .unwrap()
+                .map(Vec::from);
+            store
+                .insert_meta(DOC_NAME, "key", "value2".as_bytes())
+                .await
+                .unwrap();
+            db_txn.await.into_result()?;
+            assert_eq!(prev.as_deref(), Some("value1".as_bytes()));
+
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+            let prev = store
+                .get_meta(DOC_NAME, "key")
+                .await
+                .unwrap()
+                .map(Vec::from);
+            store.remove_meta(DOC_NAME, "key").await.unwrap();
+            assert_eq!(prev.as_deref(), Some("value2".as_bytes()));
+            let value = store.get_meta(DOC_NAME, "key").await.unwrap();
+            assert!(value.is_none());
+
+            Ok(())
+        })
+        .await
+    }
 
     // #[test]
     // fn doc_meta_iter() {
