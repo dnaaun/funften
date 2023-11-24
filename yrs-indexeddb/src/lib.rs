@@ -433,7 +433,6 @@ mod tests {
                 text.push(&mut txn, "b");
                 text.push(&mut txn, "c");
 
-
                 {
                     let db3 = db3.clone();
                     let db_txn = db3.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
@@ -557,36 +556,40 @@ mod tests {
     //     assert_eq!(actual, Some(expected));
     // }
 
-    // #[test]
-    // fn state_diff_from_doc() {
-    //     const DOC_NAME: &str = "doc";
-    //     let cleaner = Cleaner::new("lmdb-state_diff_from_doc");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    #[test]
+    async fn state_diff_from_doc() -> IResult<()> {
+        const DOC_NAME: &str = "doc";
 
-    //     let (sv, expected) = {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         // generate 3 updates
-    //         text.push(&mut doc.transact_mut(), "a");
-    //         text.push(&mut doc.transact_mut(), "b");
-    //         let sv = doc.transact().state_vector();
-    //         text.push(&mut doc.transact_mut(), "c");
-    //         let update = doc.transact().encode_diff_v1(&sv);
+        with_idb(move |db| async move {
+            let (sv, expected) = {
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                // generate 3 updates
+                text.push(&mut doc.transact_mut(), "a");
+                text.push(&mut doc.transact_mut(), "b");
+                let sv = doc.transact().state_vector();
+                text.push(&mut doc.transact_mut(), "c");
+                let update = doc.transact().encode_diff_v1(&sv);
 
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.insert_doc(DOC_NAME, &doc.transact()).unwrap();
-    //         db_txn.commit().unwrap();
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+                store.insert_doc(DOC_NAME, &doc.transact()).await.unwrap();
+                db_txn.await.into_result()?;
 
-    //         (sv, update)
-    //     };
+                (sv, update)
+            };
 
-    //     let db_txn = env.get_reader().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
-    //     let actual = db.get_diff(DOC_NAME, &sv).unwrap();
-    //     assert_eq!(actual, Some(expected));
-    // }
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+            let actual = store.get_diff(DOC_NAME, &sv).await.unwrap();
+            assert_eq!(actual, Some(expected));
+
+            Ok(())
+        })
+        .await
+    }
 
     // #[test]
     // fn doc_meta() {
