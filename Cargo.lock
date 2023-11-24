@@ -1181,8 +1181,6 @@ dependencies = [
 [[package]]
 name = "indexed_db_futures"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cc2083760572ee02385ab8b7c02c20925d2dd1f97a1a25a8737a238608f1152"
 dependencies = [
  "accessory",
  "cfg-if",
@@ -1708,9 +1706,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.17.1"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
+checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
 
 [[package]]
 name = "openssl"
@@ -2547,6 +2545,12 @@ name = "sync_wrapper"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
+
+[[package]]
+name = "tap"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
@@ -3403,10 +3407,15 @@ dependencies = [
 name = "yrs-indexeddb"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "futures 0.3.29",
  "indexed_db_futures",
  "js-sys",
+ "once_cell",
+ "tap",
  "wasm-bindgen-test",
+ "web-sys",
+ "yrs 0.17.1",
  "yrs-kvstore-async",
 ]
 
@@ -3418,6 +3427,7 @@ dependencies = [
  "futures 0.3.29",
  "pin-project",
  "smallvec",
+ "web-sys",
  "yrs 0.17.1",
 ]
 

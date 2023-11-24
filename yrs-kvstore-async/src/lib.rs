@@ -147,6 +147,7 @@ where
     /// entries that may not have been merged with the main document state yet.
     ///
     /// This feature requires only a read capabilities from the database transaction.
+    /// TODO Don't take ownership of Doc.
     async fn load_doc<'b, K: AsRef<[u8]> + ?Sized>(
         &'a self,
         name: &'b K,
@@ -371,6 +372,15 @@ where
     }
 }
 
+impl<'a, T> DocOps<'a> for T
+where
+    T: KVStore<'a> + Sized,
+
+    // Not sure why this bound is needed.
+    <T as KVStore<'a>>::Error: 'static,
+{
+}
+
 async fn get_oid<'a, DB: DocOps<'a> + ?Sized>(db: &DB, name: &[u8]) -> Result<Option<OID>, Error>
 where
     Error: From<<DB as KVStore<'a>>::Error>,
@@ -449,6 +459,7 @@ where
     if found {
         update_count |= 1 << 31; // mark hi bit to note that document core state was used
     }
+    txn.commit();
     drop(txn);
     Ok((doc, update_count))
 }

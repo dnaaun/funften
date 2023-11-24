@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::fmt::Display;
 use std::task::Poll;
 
+use futures::FutureExt;
 use indexed_db_futures::prelude::*;
 use indexed_db_futures::web_sys::wasm_bindgen::JsValue;
 use indexed_db_futures::web_sys::IdbKeyRange;
@@ -8,36 +10,39 @@ use indexed_db_futures::{
     request::OpenDbRequest, web_sys::DomException, IdbDatabase, IdbVersionChangeEvent,
 };
 use js_sys::wasm_bindgen::JsCast;
-use js_sys::{Object, Uint8Array};
+use js_sys::{ArrayBuffer, Object, Uint8Array};
+use wasm_bindgen_test::console_log;
 use yrs_kvstore_async::{KVEntry, KVStore};
 
 struct IdbStore<'a> {
-    object_store_name: String,
-    // db: IdbDatabase,
-    txn: IdbTransaction<'a>,
+    object_store: IdbObjectStore<'a>,
 }
 
 impl<'a> IdbStore<'a> {
-    async fn new(txn: IdbTransaction<'a>, object_store_name: String) -> Result<Self, IdbError> {
-        // let mut db_req: OpenDbRequest = IdbDatabase::open_u32(&db_name, 1)?;
+    fn new(object_store: IdbObjectStore<'a>) -> Self {
+        Self { object_store }
+    }
 
-        // let object_store2 = object_store.clone();
-        // db_req.set_on_upgrade_needed(Some(
-        //     move |evt: &IdbVersionChangeEvent| -> Result<(), JsValue> {
-        //         // Check if the object store exists; create it if it doesn't
-        //         if let None = evt.db().object_store_names().find(|n| n == &object_store2) {
-        //             evt.db().create_object_store(&object_store2)?;
-        //         }
-        //         Ok(())
-        //     },
-        // ));
+    pub async fn prepare_db(
+        db_name: &str,
+        object_store_name: &str,
+    ) -> Result<IdbDatabase, DomException> {
+        let mut db_req: OpenDbRequest = IdbDatabase::open_u32(&db_name, 1)?;
 
-        // let db: IdbDatabase = db_req.await?;
+        let object_store2 = object_store_name.to_owned();
+        db_req.set_on_upgrade_needed(Some(
+            move |evt: &IdbVersionChangeEvent| -> Result<(), JsValue> {
+                // Check if the object store exists; create it if it doesn't
+                if let None = evt.db().object_store_names().find(|n| n == &object_store2) {
+                    evt.db().create_object_store(&object_store2)?;
+                }
+                Ok(())
+            },
+        ));
 
-        Ok(Self {
-            object_store_name,
-            txn,
-        })
+        let db: IdbDatabase = db_req.await?;
+
+        Ok(db)
     }
 }
 
@@ -57,26 +62,7 @@ impl KVEntry for IdbEntry {
 }
 
 struct IdbStream<'a> {
-    txn: &'a IdbTransaction<'a>,
-    object_store_name: &'a str,
-    range: IdbKeyRange,
-    object_store: Option<IdbObjectStore<'a>>,
-    cursor: Option<Option<IdbCursorWithValue<'a, IdbObjectStore<'a>>>>,
-}
-
-impl<'a> IdbStream<'a> {
-    async fn setup(&'a mut self) -> Result<(), IdbError> {
-        self.object_store = Some(self.txn.object_store(self.object_store_name)?);
-        self.cursor = Some(
-            self.object_store
-                .as_ref()
-                .unwrap()
-                .open_cursor_with_range(&self.range)?
-                .await?,
-        );
-
-        Ok(())
-    }
+    cursor: Option<IdbCursorWithValue<'a, IdbObjectStore<'a>>>,
 }
 
 /// TODO: An enum in anticipation of having to support more errors.
@@ -101,7 +87,7 @@ impl Display for IdbError {
             IdbError::InvalidValueInIdb(e) => {
                 let err_text = match e.clone().dyn_into::<Object>() {
                     Ok(obj) => obj.to_string().as_string().unwrap(),
-                    Err(e) => "InvalidValueInIdb: could not convert error to Object".to_owned(),
+                    Err(_) => format!("InvalidValueInIdb: could not convert error to Object",),
                 };
                 write!(f, "{}", err_text)
             }
@@ -116,10 +102,7 @@ impl<'a> futures::Stream for IdbStream<'a> {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let cursor = self.cursor.as_ref().unwrap();
-        let object_store = self.object_store.as_ref().unwrap();
-
-        let cursor = match cursor {
+        let cursor = match self.cursor.as_ref() {
             None => return Poll::Ready(None),
             Some(cursor) => cursor,
         };
@@ -131,8 +114,36 @@ impl<'a> futures::Stream for IdbStream<'a> {
 
         let value = cursor.value();
 
-        let key = key.dyn_into::<Uint8Array>().unwrap().to_vec();
+        // For some reason, I get ArrayBuffer for the key instead of a Uint8Array, so I gotta
+        // do this instead of dyn_into.
+        let key = Uint8Array::new(&key).to_vec();
         let value = value.dyn_into::<Uint8Array>().unwrap().to_vec();
+
+        
+        let continue_cursor_res = cursor.advance(1);
+        match continue_cursor_res {
+            Ok(mut fut) => {
+                cx.waker().wake_by_ref();
+                let poll_result = fut.poll_unpin(cx);
+                match poll_result {
+                    Poll::Ready(result) => {
+                        result.unwrap();
+                    }
+                    Poll::Pending => {
+                        return Poll::Pending;
+                    }
+                }
+            }
+            Err(err) => {
+                // The error below is expected when we reach the end of the cursor.
+                // https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continue#invalidstateerror
+                if err.name() == "InvalidStateError" {
+                    return Poll::Ready(None);
+                } else {
+                    panic!("Unexpected error: {}", err.to_string());
+                }
+            }
+        }
 
         Poll::Ready(Some(IdbEntry { key, value }))
     }
@@ -148,10 +159,9 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
     type Return = Vec<u8>;
 
     async fn get(&self, key: &[u8]) -> Result<Option<Self::Return>, Self::Error> {
-        let store = self.txn.object_store(&self.object_store_name)?;
-
         let key = js_sys::Uint8Array::from(key);
-        let result = store
+        let result = self
+            .object_store
             .get(&key)?
             .await?
             .map(|v| v.dyn_into::<Uint8Array>())
@@ -162,23 +172,38 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
     }
 
     async fn upsert(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
-        let store = self.txn.object_store(&self.object_store_name)?;
         let key = js_sys::Uint8Array::from(key);
         let value = js_sys::Uint8Array::from(value);
-        store.put_key_val(&key, &value)?;
+        self.object_store.put_key_val(&key, &value)?;
 
         Ok(())
     }
 
     async fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
-        let store = self.txn.object_store(&self.object_store_name)?;
         let key = js_sys::Uint8Array::from(key);
-        store.delete(&key)?;
+        self.object_store.delete(&key)?;
         Ok(())
     }
 
     async fn remove_range(&self, from: &[u8], to: &[u8]) -> Result<(), Self::Error> {
-        todo!()
+        let from = js_sys::Uint8Array::from(from);
+        let to = js_sys::Uint8Array::from(to);
+        let range = IdbKeyRange::bound(
+            &from.dyn_into::<JsValue>().unwrap(),
+            &to.dyn_into::<JsValue>().unwrap(),
+        )
+        .unwrap();
+        let cursor = self.object_store.open_cursor_with_range(&range)?.await?;
+
+        if let Some(cursor) = cursor {
+            let items = cursor.into_vec(0).await?;
+
+            for item in items {
+                self.object_store.delete(item.key())?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn iter_range<'b>(
@@ -191,26 +216,18 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
             .unwrap();
         let to = js_sys::Uint8Array::from(to).dyn_into::<JsValue>().unwrap();
 
-
         let range = IdbKeyRange::bound(&from, &to).unwrap();
 
-        let mut stream_builder = IdbStream {
-            txn: &self.txn,
-            range,
-            object_store_name: self.object_store_name.as_str(),
-            object_store: None,
-            cursor: None,
-        };
+        let cursor = self.object_store.open_cursor_with_range(&range)?.await?;
 
-        Ok(stream_builder)
+        Ok(IdbStream { cursor })
     }
 
     async fn peek_back(&self, key: &[u8]) -> Result<Option<Self::Entry>, Self::Error> {
-        let object_store = self.txn.object_store(&self.object_store_name)?;
-
         let to = js_sys::Uint8Array::from(key);
         let range = IdbKeyRange::upper_bound(&to.dyn_into::<JsValue>().unwrap()).unwrap();
-        let cursor = object_store
+        let cursor = self
+            .object_store
             .open_cursor_with_range_and_direction(&range, IdbCursorDirection::Prev)?
             .await?;
         let cursor = match cursor {
@@ -232,111 +249,171 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
 
 #[cfg(test)]
 mod tests {
+    use indexed_db_futures::prelude::*;
+    use indexed_db_futures::web_sys::IdbTransactionMode;
+    use js_sys::JsString;
+    use once_cell::sync::Lazy;
     use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
+    use yrs::{Doc, GetString, ReadTxn, Text, Transact};
+    use yrs_kvstore_async::DocOps;
 
-    use crate::IdbStore;
+    use crate::{IdbError, IdbStore};
 
     wasm_bindgen_test_configure!(run_in_browser);
 
-    #[test]
-    async fn plain() {
-        let store = IdbStore::new("test".to_owned(), "test".to_owned())
+    type IResult<T, E = IdbError> = Result<T, E>;
+
+    const TEST_OBJECT_STORE_NAME: &str = "test_object_store";
+
+    /// We need to increment the db name to avoid deadlocks.
+    const GET_DB_NAME: Lazy<
+        std::sync::Mutex<
+            std::cell::RefCell<std::iter::Map<std::ops::RangeFrom<usize>, fn(usize) -> String>>,
+        >,
+    > = Lazy::new(|| {
+        std::sync::Mutex::new(std::cell::RefCell::new(
+            (0..).map(|i| format!("test_db_{}", i)),
+        ))
+    });
+
+    async fn with_idb<'a, F, Fut>(func: F) -> IResult<()>
+    where
+        F: FnOnce(IdbDatabase) -> Fut,
+        Fut: std::future::Future<Output = IResult<()>>,
+    {
+        let db_name = &{ (GET_DB_NAME.lock().unwrap().borrow_mut()).next().unwrap() };
+        let db = IdbStore::prepare_db(db_name, TEST_OBJECT_STORE_NAME)
             .await
             .unwrap();
+
+        func(db).await?;
+
+        // lifetime errors otherwise.
+        let db = IdbStore::prepare_db(db_name, TEST_OBJECT_STORE_NAME)
+            .await
+            .unwrap();
+
+        Ok(db.delete()?.await?)
     }
 
-    // #[test]
-    // fn create_get_remove() {
-    //     let cleaner = Cleaner::new("lmdb-create_get_remove");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
+    #[test]
+    async fn create_get_remove() -> IResult<()> {
+        with_idb(move |db| async move {
+            // insert document
+            {
+                let db_txn = db.transaction_on_one_with_mode(
+                    TEST_OBJECT_STORE_NAME,
+                    IdbTransactionMode::Readwrite,
+                )?;
+                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let store = IdbStore::new(object_store);
 
-    //     // insert document
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         text.insert(&mut txn, 0, "hello");
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                let mut txn = doc.transact_mut();
+                text.insert(&mut txn, 0, "hello");
 
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.insert_doc("doc", &txn).unwrap();
-    //         db_txn.commit().unwrap();
-    //     }
+                store.insert_doc("doc", &txn).await.unwrap();
+                db_txn.await.into_result()?;
+            }
 
-    //     // retrieve document
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         let db_txn = env.get_reader().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.load_doc("doc", &mut txn).unwrap();
+            // retrieve document
+            {
+                let db_txn = db.transaction_on_one_with_mode(
+                    TEST_OBJECT_STORE_NAME,
+                    IdbTransactionMode::Readwrite,
+                )?;
+                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let store = IdbStore::new(object_store);
 
-    //         assert_eq!(text.get_string(&txn), "hello");
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                let (doc, _) = store.load_doc("doc", doc).await.unwrap();
 
-    //         let (sv, completed) = db.get_state_vector("doc").unwrap();
-    //         assert_eq!(sv, Some(txn.state_vector()));
-    //         assert!(completed);
-    //     }
+                let txn = doc.transact_mut();
+                assert_eq!(text.get_string(&txn), "hello");
 
-    //     // remove document
-    //     {
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
+                let (sv, completed) = store.get_state_vector("doc").await.unwrap();
+                assert_eq!(sv, Some(txn.state_vector()));
+                assert!(completed);
+            }
 
-    //         db.clear_doc("doc").unwrap();
+            // remove document
+            {
+                let db_txn = db.transaction_on_one_with_mode(
+                    TEST_OBJECT_STORE_NAME,
+                    IdbTransactionMode::Readwrite,
+                )?;
+                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let store = IdbStore::new(object_store);
 
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         db.load_doc("doc", &mut txn).unwrap();
+                store.clear_doc("doc").await.unwrap();
 
-    //         assert_eq!(text.get_string(&txn), "");
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                let (doc, _) = store.load_doc("doc", doc).await.unwrap();
 
-    //         let (sv, completed) = db.get_state_vector("doc").unwrap();
-    //         assert!(sv.is_none());
-    //         assert!(completed);
-    //     }
-    // }
-    // #[test]
-    // fn multi_insert() {
-    //     let cleaner = Cleaner::new("lmdb-multi_insert");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
+                let txn = doc.transact_mut();
+                assert_eq!(text.get_string(&txn), "");
 
-    //     // insert document twice
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         text.push(&mut txn, "hello");
+                let (sv, completed) = DocOps::get_state_vector(&store, "doc").await.unwrap();
+                assert!(sv.is_none());
+                assert!(completed);
+            };
 
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
+            Ok(())
+        })
+        .await
+    }
 
-    //         db.insert_doc("doc", &txn).unwrap();
+    #[test]
+    async fn multi_insert() -> IResult<()> {
+        with_idb(move |db| async move {
+            // insert document twice
+            {
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                let mut txn = doc.transact_mut();
+                text.push(&mut txn, "hello");
 
-    //         text.push(&mut txn, " world");
+                let db_txn = db.transaction_on_one_with_mode(
+                    TEST_OBJECT_STORE_NAME,
+                    IdbTransactionMode::Readwrite,
+                )?;
+                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let store = IdbStore::new(object_store);
 
-    //         db.insert_doc("doc", &txn).unwrap();
+                store.insert_doc("doc", &txn).await.unwrap();
 
-    //         db_txn.commit().unwrap();
-    //     }
+                text.push(&mut txn, " world");
 
-    //     // retrieve document
-    //     {
-    //         let db_txn = env.get_reader().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
+                store.insert_doc("doc", &txn).await.unwrap();
 
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         db.load_doc("doc", &mut txn).unwrap();
+                db_txn.await.into_result()?;
+            }
 
-    //         assert_eq!(text.get_string(&txn), "hello world");
-    //     }
-    // }
+            // retrieve document
+            {
+                let db_txn = db.transaction_on_one_with_mode(
+                    TEST_OBJECT_STORE_NAME,
+                    IdbTransactionMode::Readwrite,
+                )?;
+                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let store = IdbStore::new(object_store);
+
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                let (doc, _) = store.load_doc("doc", doc).await.unwrap();
+
+                let txn = doc.transact();
+
+                assert_eq!(text.get_string(&txn), "hello world");
+            }
+
+            Ok(())
+        })
+        .await
+    }
 
     // #[test]
     // fn incremental_updates() {
