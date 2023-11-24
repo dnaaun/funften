@@ -44,6 +44,7 @@ impl<'a> IdbStore<'a> {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct IdbEntry {
     key: Vec<u8>,
     value: Vec<u8>,
@@ -254,7 +255,7 @@ mod tests {
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::{console_log, wasm_bindgen_test as test, wasm_bindgen_test_configure};
     use yrs::{Doc, GetString, ReadTxn, Text, Transact};
-    use yrs_kvstore_async::DocOps;
+    use yrs_kvstore_async::{DocOps, KVStore};
 
     use crate::{IdbError, IdbStore};
 
@@ -264,7 +265,7 @@ mod tests {
 
     const OJ_NAME: &str = "test_object_store";
 
-    /// Incrementing the db name, in case we need to avoid deadlocks.
+    /// Incrementing the db name, in case we need to avoid deadlocks because of concurrent tests.
     const GET_DB_NAME: Lazy<
         std::sync::Mutex<
             std::cell::RefCell<std::iter::Map<std::ops::RangeFrom<usize>, fn(usize) -> String>>,
@@ -290,6 +291,65 @@ mod tests {
         let db = IdbStore::prepare_db(db_name, OJ_NAME).await.unwrap();
 
         Ok(db.delete()?.await?)
+    }
+
+    #[test]
+    async fn test_peek_back() -> Result<()> {
+        use crate::IdbEntry;
+        with_idb_database(move |db| async move {
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+
+            store.upsert("a".as_bytes(), "a value".as_bytes()).await?;
+            store.upsert("c".as_bytes(), "c value".as_bytes()).await?;
+            store.upsert("e".as_bytes(), "e value".as_bytes()).await?;
+
+            db_txn.await.into_result()?;
+
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+
+            // when the upper bound key is present
+            assert_eq!(
+                store.peek_back("e".as_bytes()).await.unwrap(),
+                Some(IdbEntry {
+                    key: "e".as_bytes().to_vec(),
+                    value: "e value".as_bytes().to_vec()
+                })
+            );
+
+            // when the upper bound key is present, but is not the final key
+            assert_eq!(
+                store.peek_back("a".as_bytes()).await.unwrap(),
+                Some(IdbEntry {
+                    key: "a".as_bytes().to_vec(),
+                    value: "a value".as_bytes().to_vec()
+                })
+            );
+
+            // when the upper bound key is not present, and is beyond the final key
+            assert_eq!(
+                store.peek_back("f".as_bytes()).await.unwrap(),
+                Some(IdbEntry {
+                    key: "e".as_bytes().to_vec(),
+                    value: "e value".as_bytes().to_vec()
+                })
+            );
+
+            // when the upper bound key is not present, and is between two keys
+            assert_eq!(
+                store.peek_back("d".as_bytes()).await.unwrap(),
+                Some(IdbEntry {
+                    key: "c".as_bytes().to_vec(),
+                    value: "c value".as_bytes().to_vec()
+                })
+            );
+
+            Ok(())
+        })
+        .await
     }
 
     #[test]
