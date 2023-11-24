@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::task::Poll;
 
+use futures::future::OptionFuture;
 use futures::FutureExt;
 use indexed_db_futures::prelude::*;
 use indexed_db_futures::web_sys::wasm_bindgen::JsValue;
@@ -119,7 +120,6 @@ impl<'a> futures::Stream for IdbStream<'a> {
         let key = Uint8Array::new(&key).to_vec();
         let value = value.dyn_into::<Uint8Array>().unwrap().to_vec();
 
-        
         let continue_cursor_res = cursor.advance(1);
         match continue_cursor_res {
             Ok(mut fut) => {
@@ -228,7 +228,7 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
         let range = IdbKeyRange::upper_bound(&to.dyn_into::<JsValue>().unwrap()).unwrap();
         let cursor = self
             .object_store
-            .open_cursor_with_range_and_direction(&range, IdbCursorDirection::Prev)?
+            .open_cursor_with_range_and_direction_owned(range, IdbCursorDirection::Prev)?
             .await?;
         let cursor = match cursor {
             None => return Ok(None),
@@ -240,7 +240,7 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
         };
         let value = cursor.value();
 
-        let key = key.dyn_into::<Uint8Array>().unwrap().to_vec();
+        let key = Uint8Array::new(&key).to_vec();
         let value = value.dyn_into::<Uint8Array>().unwrap().to_vec();
 
         Ok(Some(IdbEntry { key, value }))
@@ -249,11 +249,15 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::{rc::Rc, time::Duration};
+
     use indexed_db_futures::prelude::*;
-    use indexed_db_futures::web_sys::IdbTransactionMode;
+    use indexed_db_futures::web_sys::IdbTransactionMode::*;
     use js_sys::JsString;
     use once_cell::sync::Lazy;
-    use wasm_bindgen_test::{wasm_bindgen_test as test, wasm_bindgen_test_configure};
+    use tap::TapFallible;
+    use wasm_bindgen_futures::spawn_local;
+    use wasm_bindgen_test::{console_log, wasm_bindgen_test as test, wasm_bindgen_test_configure};
     use yrs::{Doc, GetString, ReadTxn, Text, Transact};
     use yrs_kvstore_async::DocOps;
 
@@ -263,7 +267,7 @@ mod tests {
 
     type IResult<T, E = IdbError> = Result<T, E>;
 
-    const TEST_OBJECT_STORE_NAME: &str = "test_object_store";
+    const OJ_NAME: &str = "test_object_store";
 
     /// We need to increment the db name to avoid deadlocks.
     const GET_DB_NAME: Lazy<
@@ -278,20 +282,16 @@ mod tests {
 
     async fn with_idb<'a, F, Fut>(func: F) -> IResult<()>
     where
-        F: FnOnce(IdbDatabase) -> Fut,
+        F: FnOnce(Rc<IdbDatabase>) -> Fut,
         Fut: std::future::Future<Output = IResult<()>>,
     {
         let db_name = &{ (GET_DB_NAME.lock().unwrap().borrow_mut()).next().unwrap() };
-        let db = IdbStore::prepare_db(db_name, TEST_OBJECT_STORE_NAME)
-            .await
-            .unwrap();
+        let db = Rc::new(IdbStore::prepare_db(db_name, OJ_NAME).await.unwrap());
 
         func(db).await?;
 
         // lifetime errors otherwise.
-        let db = IdbStore::prepare_db(db_name, TEST_OBJECT_STORE_NAME)
-            .await
-            .unwrap();
+        let db = IdbStore::prepare_db(db_name, OJ_NAME).await.unwrap();
 
         Ok(db.delete()?.await?)
     }
@@ -301,11 +301,8 @@ mod tests {
         with_idb(move |db| async move {
             // insert document
             {
-                let db_txn = db.transaction_on_one_with_mode(
-                    TEST_OBJECT_STORE_NAME,
-                    IdbTransactionMode::Readwrite,
-                )?;
-                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
                 let store = IdbStore::new(object_store);
 
                 let doc = Doc::new();
@@ -319,11 +316,8 @@ mod tests {
 
             // retrieve document
             {
-                let db_txn = db.transaction_on_one_with_mode(
-                    TEST_OBJECT_STORE_NAME,
-                    IdbTransactionMode::Readwrite,
-                )?;
-                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
                 let store = IdbStore::new(object_store);
 
                 let doc = Doc::new();
@@ -340,11 +334,8 @@ mod tests {
 
             // remove document
             {
-                let db_txn = db.transaction_on_one_with_mode(
-                    TEST_OBJECT_STORE_NAME,
-                    IdbTransactionMode::Readwrite,
-                )?;
-                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
                 let store = IdbStore::new(object_store);
 
                 store.clear_doc("doc").await.unwrap();
@@ -376,11 +367,8 @@ mod tests {
                 let mut txn = doc.transact_mut();
                 text.push(&mut txn, "hello");
 
-                let db_txn = db.transaction_on_one_with_mode(
-                    TEST_OBJECT_STORE_NAME,
-                    IdbTransactionMode::Readwrite,
-                )?;
-                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
                 let store = IdbStore::new(object_store);
 
                 store.insert_doc("doc", &txn).await.unwrap();
@@ -394,11 +382,8 @@ mod tests {
 
             // retrieve document
             {
-                let db_txn = db.transaction_on_one_with_mode(
-                    TEST_OBJECT_STORE_NAME,
-                    IdbTransactionMode::Readwrite,
-                )?;
-                let object_store = db_txn.object_store(TEST_OBJECT_STORE_NAME)?;
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
                 let store = IdbStore::new(object_store);
 
                 let doc = Doc::new();
@@ -415,59 +400,88 @@ mod tests {
         .await
     }
 
-    // #[test]
-    // fn incremental_updates() {
-    //     const DOC_NAME: &str = "doc";
-    //     let cleaner = Cleaner::new("lmdb-incremental_updates");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
-    //     let env = Arc::new(env);
-    //     let h = Arc::new(h);
+    #[test]
+    async fn incremental_updates() -> IResult<()> {
+        const DOC_NAME: &str = "doc";
 
-    //     // store document updates
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
+        with_idb(move |db| async move {
+            // store document updates
+            {
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
 
-    //         let env = env.clone();
-    //         let h = h.clone();
-    //         let _sub = doc.observe_update_v1(move |_, u| {
-    //             let db_txn = env.new_transaction().unwrap();
-    //             let db = LmdbStore::from(db_txn.bind(&h));
-    //             db.push_update(DOC_NAME, &u.update).unwrap();
-    //             db_txn.commit().unwrap();
-    //         });
-    //         // generate 3 updates
-    //         text.push(&mut doc.transact_mut(), "a");
-    //         text.push(&mut doc.transact_mut(), "b");
-    //         text.push(&mut doc.transact_mut(), "c");
-    //     }
+                let db2 = db.clone();
+                let db3 = db.clone();
+                let _sub = doc.observe_update_v1(move |_, u| {
+                    let update = u.update.clone();
+                    let db2 = db2.clone();
+                    spawn_local(async move {
+                        let db_txn = db2
+                            .transaction_on_one_with_mode(OJ_NAME, Readwrite)
+                            .unwrap();
+                        let object_store = db_txn.object_store(OJ_NAME).unwrap();
+                        let store = IdbStore::new(object_store);
+                        store.push_update(DOC_NAME, &update).await.unwrap();
+                        store.flush_doc(DOC_NAME).await.unwrap();
+                        db_txn.await.into_result().unwrap();
+                    })
+                });
 
-    //     // load document
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
+                let mut txn = doc.transact_mut();
+                // generate 3 updates
+                text.push(&mut txn, "a");
+                text.push(&mut txn, "b");
+                text.push(&mut txn, "c");
 
-    //         let db_txn = env.get_reader().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.load_doc(DOC_NAME, &mut txn).unwrap();
 
-    //         assert_eq!(text.get_string(&txn), "abc");
-    //     }
+                {
+                    let db3 = db3.clone();
+                    let db_txn = db3.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                    let object_store = db_txn.object_store(OJ_NAME)?;
+                    let store = IdbStore::new(object_store);
 
-    //     // flush document
-    //     {
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         let doc = db.flush_doc(DOC_NAME).unwrap().unwrap();
-    //         db_txn.commit().unwrap();
+                    let doc = Doc::new();
+                    let (doc, _) = store.load_doc(DOC_NAME, doc).await.unwrap();
+                    let text = doc.get_or_insert_text("text");
 
-    //         let text = doc.get_or_insert_text("text");
+                    console_log!("text: {}", text.get_string(&doc.transact()));
+                }
 
-    //         assert_eq!(text.get_string(&doc.transact()), "abc");
-    //     }
-    // }
+                txn.commit();
+            }
+
+            // load document
+            {
+                let doc = Doc::new();
+
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+
+                let (doc, _) = store.load_doc(DOC_NAME, doc).await.unwrap();
+                let text = doc.get_or_insert_text("text");
+                let txn = doc.transact_mut();
+
+                assert_eq!(text.get_string(&txn), "abc");
+            }
+
+            // flush document
+            {
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+                let doc = store.flush_doc(DOC_NAME).await.unwrap().unwrap();
+                db_txn.await.into_result()?;
+
+                let text = doc.get_or_insert_text("text");
+
+                assert_eq!(text.get_string(&doc.transact()), "abc");
+            }
+
+            Ok(())
+        })
+        .await
+    }
 
     // #[test]
     // fn state_vector_updates_only() {

@@ -3413,6 +3413,7 @@ dependencies = [
  "js-sys",
  "once_cell",
  "tap",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
  "yrs 0.17.1",

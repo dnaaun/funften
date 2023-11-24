@@ -10,6 +10,7 @@ futures = "0.3.29"
 indexed_db_futures = { path = "../../rust-indexed-db" }
 js-sys = "0.3.65"
 tap = "1.0.1"
+wasm-bindgen-futures = "0.4.38"
 wasm-bindgen-test = "0.3.38"
 web-sys = { version = "0.3.65", features = ["console"] }
 yrs = "0.17.1"
