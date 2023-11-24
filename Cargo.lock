@@ -1181,6 +1181,8 @@ dependencies = [
 [[package]]
 name = "indexed_db_futures"
 version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cc2083760572ee02385ab8b7c02c20925d2dd1f97a1a25a8737a238608f1152"
 dependencies = [
  "accessory",
  "cfg-if",

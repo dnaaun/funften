@@ -478,42 +478,52 @@ mod tests {
         .await
     }
 
-    // #[test]
-    // fn state_vector_updates_only() {
-    //     const DOC_NAME: &str = "doc";
-    //     let cleaner = Cleaner::new("lmdb-state_vector_updates_only");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
-    //     let env = Arc::new(env);
-    //     let h = Arc::new(h);
+    #[test]
+    async fn state_vector_updates_only() -> Result<()> {
+        with_idb_database(move |db| async move {
+            const DOC_NAME: &str = "doc";
 
-    //     // store document updates
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let env = env.clone();
-    //         let h = h.clone();
-    //         let _sub = doc.observe_update_v1(move |_, u| {
-    //             let db_txn = env.new_transaction().unwrap();
-    //             let db = LmdbStore::from(db_txn.bind(&h));
-    //             db.push_update(DOC_NAME, &u.update).unwrap();
-    //             db_txn.commit().unwrap();
-    //         });
-    //         // generate 3 updates
-    //         text.push(&mut doc.transact_mut(), "a");
-    //         text.push(&mut doc.transact_mut(), "b");
-    //         text.push(&mut doc.transact_mut(), "c");
+            // store document updates
+            {
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
 
-    //         let sv = doc.transact().state_vector();
-    //         sv
-    //     };
+                let db2 = db.clone();
+                let _sub = doc.observe_update_v1(move |_, u| {
+                    let update = u.update.clone();
+                    let db2 = db2.clone();
+                    spawn_local(async move {
+                        let db_txn = db2
+                            .transaction_on_one_with_mode(OJ_NAME, Readwrite)
+                            .unwrap();
+                        let object_store = db_txn.object_store(OJ_NAME).unwrap();
+                        let store = IdbStore::new(object_store);
 
-    //     let db_txn = env.get_reader().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
-    //     let (sv, completed) = db.get_state_vector(DOC_NAME).unwrap();
-    //     assert!(sv.is_none());
-    //     assert!(!completed); // since it's not completed, we should recalculate state vector from doc state
-    // }
+                        store.push_update(DOC_NAME, &update).await.unwrap();
+                        db_txn.await.into_result().unwrap();
+                    })
+                });
+                // generate 3 updates
+                text.push(&mut doc.transact_mut(), "a");
+                text.push(&mut doc.transact_mut(), "b");
+                text.push(&mut doc.transact_mut(), "c");
+
+                let sv = doc.transact().state_vector();
+                sv
+            };
+
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+
+            let (sv, completed) = store.get_state_vector(DOC_NAME).await.unwrap();
+            assert!(sv.is_none());
+            assert!(!completed); // since it's not completed, we should recalculate state vector from doc state
+
+            Ok(())
+        })
+        .await
+    }
 
     #[test]
     async fn state_diff_from_updates() -> Result<()> {
