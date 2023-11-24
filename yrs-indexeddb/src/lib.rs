@@ -1,8 +1,6 @@
-use std::cell::RefCell;
 use std::fmt::Display;
 use std::task::Poll;
 
-use futures::future::OptionFuture;
 use futures::FutureExt;
 use indexed_db_futures::prelude::*;
 use indexed_db_futures::web_sys::wasm_bindgen::JsValue;
@@ -11,16 +9,15 @@ use indexed_db_futures::{
     request::OpenDbRequest, web_sys::DomException, IdbDatabase, IdbVersionChangeEvent,
 };
 use js_sys::wasm_bindgen::JsCast;
-use js_sys::{ArrayBuffer, Object, Uint8Array};
-use wasm_bindgen_test::console_log;
+use js_sys::{Object, Uint8Array};
 use yrs_kvstore_async::{KVEntry, KVStore};
 
-struct IdbStore<'a> {
+pub struct IdbStore<'a> {
     object_store: IdbObjectStore<'a>,
 }
 
 impl<'a> IdbStore<'a> {
-    fn new(object_store: IdbObjectStore<'a>) -> Self {
+    pub fn new(object_store: IdbObjectStore<'a>) -> Self {
         Self { object_store }
     }
 
@@ -47,7 +44,7 @@ impl<'a> IdbStore<'a> {
     }
 }
 
-struct IdbEntry {
+pub struct IdbEntry {
     key: Vec<u8>,
     value: Vec<u8>,
 }
@@ -62,13 +59,12 @@ impl KVEntry for IdbEntry {
     }
 }
 
-struct IdbStream<'a> {
+pub struct IdbStream<'a> {
     cursor: Option<IdbCursorWithValue<'a, IdbObjectStore<'a>>>,
 }
 
-/// TODO: An enum in anticipation of having to support more errors.
 #[derive(Debug)]
-enum IdbError {
+pub enum IdbError {
     DomException(DomException),
     InvalidValueInIdb(JsValue),
 }
@@ -249,14 +245,12 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{rc::Rc, time::Duration};
+    use std::rc::Rc;
 
     use futures::StreamExt;
     use indexed_db_futures::prelude::*;
     use indexed_db_futures::web_sys::IdbTransactionMode::*;
-    use js_sys::JsString;
     use once_cell::sync::Lazy;
-    use tap::TapFallible;
     use wasm_bindgen_futures::spawn_local;
     use wasm_bindgen_test::{console_log, wasm_bindgen_test as test, wasm_bindgen_test_configure};
     use yrs::{Doc, GetString, ReadTxn, Text, Transact};
@@ -266,11 +260,11 @@ mod tests {
 
     wasm_bindgen_test_configure!(run_in_browser);
 
-    type IResult<T, E = IdbError> = Result<T, E>;
+    type Result<T, E = IdbError> = std::result::Result<T, E>;
 
     const OJ_NAME: &str = "test_object_store";
 
-    /// We need to increment the db name to avoid deadlocks.
+    /// Incrementing the db name, in case we need to avoid deadlocks.
     const GET_DB_NAME: Lazy<
         std::sync::Mutex<
             std::cell::RefCell<std::iter::Map<std::ops::RangeFrom<usize>, fn(usize) -> String>>,
@@ -281,10 +275,11 @@ mod tests {
         ))
     });
 
-    async fn with_idb<'a, F, Fut>(func: F) -> IResult<()>
+    /// Runs a function with an IdbDatabase, and cleans up the database afterwards.
+    async fn with_idb_database<'a, F, Fut>(func: F) -> Result<()>
     where
         F: FnOnce(Rc<IdbDatabase>) -> Fut,
-        Fut: std::future::Future<Output = IResult<()>>,
+        Fut: std::future::Future<Output = Result<()>>,
     {
         let db_name = &{ (GET_DB_NAME.lock().unwrap().borrow_mut()).next().unwrap() };
         let db = Rc::new(IdbStore::prepare_db(db_name, OJ_NAME).await.unwrap());
@@ -298,8 +293,8 @@ mod tests {
     }
 
     #[test]
-    async fn create_get_remove() -> IResult<()> {
-        with_idb(move |db| async move {
+    async fn create_get_remove() -> Result<()> {
+        with_idb_database(move |db| async move {
             // insert document
             {
                 let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
@@ -359,8 +354,8 @@ mod tests {
     }
 
     #[test]
-    async fn multi_insert() -> IResult<()> {
-        with_idb(move |db| async move {
+    async fn multi_insert() -> Result<()> {
+        with_idb_database(move |db| async move {
             // insert document twice
             {
                 let doc = Doc::new();
@@ -402,10 +397,10 @@ mod tests {
     }
 
     #[test]
-    async fn incremental_updates() -> IResult<()> {
+    async fn incremental_updates() -> Result<()> {
         const DOC_NAME: &str = "doc";
 
-        with_idb(move |db| async move {
+        with_idb_database(move |db| async move {
             // store document updates
             {
                 let doc = Doc::new();
@@ -520,48 +515,54 @@ mod tests {
     //     assert!(!completed); // since it's not completed, we should recalculate state vector from doc state
     // }
 
-    // #[test]
-    // fn state_diff_from_updates() {
-    //     const DOC_NAME: &str = "doc";
-    //     let cleaner = Cleaner::new("lmdb-state_diff_from_updates");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
-    //     let env = Arc::new(env);
-    //     let h = Arc::new(h);
+    #[test]
+    async fn state_diff_from_updates() -> Result<()> {
+        const DOC_NAME: &str = "doc";
+        with_idb_database(move |db| async move {
+            let (sv, expected) = {
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
 
-    //     let (sv, expected) = {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
+                let db2 = db.clone();
+                let _sub = doc.observe_update_v1(move |_, u| {
+                    let update = u.update.clone();
+                    let db2 = db2.clone();
+                    spawn_local(async move {
+                        let db_txn = db2
+                            .transaction_on_one_with_mode(OJ_NAME, Readwrite)
+                            .unwrap();
+                        let object_store = db_txn.object_store(OJ_NAME).unwrap();
+                        let store = IdbStore::new(object_store);
+                        store.push_update(DOC_NAME, &update).await.unwrap();
+                        db_txn.await.into_result().unwrap();
+                    })
+                });
 
-    //         let env = env.clone();
-    //         let h = h.clone();
-    //         let _sub = doc.observe_update_v1(move |_, u| {
-    //             let db_txn = env.new_transaction().unwrap();
-    //             let db = LmdbStore::from(db_txn.bind(&h));
-    //             db.push_update(DOC_NAME, &u.update).unwrap();
-    //             db_txn.commit().unwrap();
-    //         });
+                // generate 3 updates
+                text.push(&mut doc.transact_mut(), "a");
+                text.push(&mut doc.transact_mut(), "b");
+                let sv = doc.transact().state_vector();
+                text.push(&mut doc.transact_mut(), "c");
+                let update = doc.transact().encode_diff_v1(&sv);
+                (sv, update)
+            };
 
-    //         // generate 3 updates
-    //         text.push(&mut doc.transact_mut(), "a");
-    //         text.push(&mut doc.transact_mut(), "b");
-    //         let sv = doc.transact().state_vector();
-    //         text.push(&mut doc.transact_mut(), "c");
-    //         let update = doc.transact().encode_diff_v1(&sv);
-    //         (sv, update)
-    //     };
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
+            let actual = store.get_diff(DOC_NAME, &sv).await.unwrap();
+            assert_eq!(actual, Some(expected));
 
-    //     let db_txn = env.get_reader().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
-    //     let actual = db.get_diff(DOC_NAME, &sv).unwrap();
-    //     assert_eq!(actual, Some(expected));
-    // }
+            Ok(())
+        })
+        .await
+    }
 
     #[test]
-    async fn state_diff_from_doc() -> IResult<()> {
+    async fn state_diff_from_doc() -> Result<()> {
         const DOC_NAME: &str = "doc";
 
-        with_idb(move |db| async move {
+        with_idb_database(move |db| async move {
             let (sv, expected) = {
                 let doc = Doc::new();
                 let text = doc.get_or_insert_text("text");
@@ -593,10 +594,10 @@ mod tests {
     }
 
     #[test]
-    async fn doc_meta() -> IResult<()> {
+    async fn doc_meta() -> Result<()> {
         const DOC_NAME: &str = "doc";
 
-        with_idb(move |db| async move {
+        with_idb_database(move |db| async move {
             let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
             let object_store = db_txn.object_store(OJ_NAME)?;
             let store = IdbStore::new(object_store);
@@ -643,8 +644,8 @@ mod tests {
     }
 
     #[test]
-    async fn doc_meta_iter() -> IResult<()> {
-        with_idb(move |db| async move {
+    async fn doc_meta_iter() -> Result<()> {
+        with_idb_database(move |db| async move {
             let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
             let object_store = db_txn.object_store(OJ_NAME)?;
             let store = IdbStore::new(object_store);
@@ -665,8 +666,8 @@ mod tests {
     }
 
     #[test]
-    async fn doc_iter() -> IResult<()> {
-        with_idb(move |db| async move {
+    async fn doc_iter() -> Result<()> {
+        with_idb_database(move |db| async move {
             // insert metadata
             {
                 let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
@@ -695,10 +696,6 @@ mod tests {
             // insert update
             {
                 let doc = Doc::new();
-
-                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
-                let object_store = db_txn.object_store(OJ_NAME)?;
-                let store = IdbStore::new(object_store);
 
                 let db2 = db.clone();
                 let _sub = doc.observe_update_v1(move |_, u| {
