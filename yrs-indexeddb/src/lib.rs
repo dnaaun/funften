@@ -251,6 +251,7 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
 mod tests {
     use std::{rc::Rc, time::Duration};
 
+    use futures::StreamExt;
     use indexed_db_futures::prelude::*;
     use indexed_db_futures::web_sys::IdbTransactionMode::*;
     use js_sys::JsString;
@@ -663,75 +664,97 @@ mod tests {
         .await
     }
 
-    // #[test]
-    // fn doc_iter() {
-    //     let cleaner = Cleaner::new("lmdb-doc_iter");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
-    //     let env = Arc::new(env);
-    //     let h = Arc::new(h);
+    #[test]
+    async fn doc_iter() -> IResult<()> {
+        with_idb(move |db| async move {
+            // insert metadata
+            {
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
 
-    //     // insert metadata
-    //     {
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.insert_meta("A", "key1", [1].as_ref()).unwrap();
-    //         db_txn.commit().unwrap();
-    //     }
+                store.insert_meta("A", "key1", [1].as_ref()).await.unwrap();
+                db_txn.await.into_result()?;
+            }
 
-    //     // insert full doc state
-    //     {
-    //         let doc = Doc::new();
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         text.push(&mut txn, "hello world");
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.insert_doc("B", &txn).unwrap();
-    //         db_txn.commit().unwrap();
-    //     }
+            // insert full doc state
+            {
+                let doc = Doc::new();
+                let text = doc.get_or_insert_text("text");
+                let mut txn = doc.transact_mut();
+                text.push(&mut txn, "hello world");
 
-    //     // insert update
-    //     {
-    //         let doc = Doc::new();
-    //         let env = env.clone();
-    //         let h = h.clone();
-    //         let _sub = doc.observe_update_v1(move |_, u| {
-    //             let db_txn = env.new_transaction().unwrap();
-    //             let db = LmdbStore::from(db_txn.bind(&h));
-    //             db.push_update("C", &u.update).unwrap();
-    //             db_txn.commit().unwrap();
-    //         });
-    //         let text = doc.get_or_insert_text("text");
-    //         let mut txn = doc.transact_mut();
-    //         text.push(&mut txn, "hello world");
-    //     }
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
 
-    //     {
-    //         let db_txn = env.get_reader().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         let mut i = db.iter_docs().unwrap();
-    //         assert_eq!(i.next(), Some("A".as_bytes().into()));
-    //         assert_eq!(i.next(), Some("B".as_bytes().into()));
-    //         assert_eq!(i.next(), Some("C".as_bytes().into()));
-    //         assert!(i.next().is_none());
-    //     }
+                store.insert_doc("B", &txn).await.unwrap();
+                db_txn.await.into_result()?;
+            }
 
-    //     // clear doc
-    //     {
-    //         let db_txn = env.new_transaction().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         db.clear_doc("B").unwrap();
-    //         db_txn.commit().unwrap();
-    //     }
+            // insert update
+            {
+                let doc = Doc::new();
 
-    //     {
-    //         let db_txn = env.get_reader().unwrap();
-    //         let db = LmdbStore::from(db_txn.bind(&h));
-    //         let mut i = db.iter_docs().unwrap();
-    //         assert_eq!(i.next(), Some("A".as_bytes().into()));
-    //         assert_eq!(i.next(), Some("C".as_bytes().into()));
-    //         assert!(i.next().is_none());
-    //     }
-    // }
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+
+                let db2 = db.clone();
+                let _sub = doc.observe_update_v1(move |_, u| {
+                    let db2 = db2.clone();
+                    let update = u.update.clone();
+                    spawn_local(async move {
+                        let db_txn = db2
+                            .transaction_on_one_with_mode(OJ_NAME, Readwrite)
+                            .unwrap();
+                        let object_store = db_txn.object_store(OJ_NAME).unwrap();
+                        let store = IdbStore::new(object_store);
+
+                        store.push_update("C", &update).await.unwrap();
+                        db_txn.await.into_result().unwrap();
+                    })
+                });
+                let text = doc.get_or_insert_text("text");
+                let mut txn = doc.transact_mut();
+                text.push(&mut txn, "hello world");
+            }
+
+            {
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+
+                let mut i = store.iter_docs().await.unwrap();
+                assert_eq!(i.next().await, Some("A".as_bytes().into()));
+                assert_eq!(i.next().await, Some("B".as_bytes().into()));
+                assert_eq!(i.next().await, Some("C".as_bytes().into()));
+                assert!(i.next().await.is_none());
+            }
+
+            // clear doc
+            {
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+
+                store.clear_doc("B").await.unwrap();
+                db_txn.await.into_result()?;
+            }
+
+            {
+                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+                let object_store = db_txn.object_store(OJ_NAME)?;
+                let store = IdbStore::new(object_store);
+
+                let mut i = store.iter_docs().await.unwrap();
+                assert_eq!(i.next().await, Some("A".as_bytes().into()));
+                assert_eq!(i.next().await, Some("C".as_bytes().into()));
+                assert!(i.next().await.is_none());
+            }
+
+            Ok(())
+        })
+        .await
+    }
 }
