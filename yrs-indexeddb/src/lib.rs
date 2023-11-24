@@ -641,24 +641,27 @@ mod tests {
         .await
     }
 
-    // #[test]
-    // fn doc_meta_iter() {
-    //     let cleaner = Cleaner::new("lmdb-doc_meta_iter");
-    //     let env = init_env(cleaner.dir());
-    //     let h = env.create_db("yrs", DbCreate).unwrap();
-    //     let db_txn = env.new_transaction().unwrap();
-    //     let db = LmdbStore::from(db_txn.bind(&h));
+    #[test]
+    async fn doc_meta_iter() -> IResult<()> {
+        with_idb(move |db| async move {
+            let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
+            let object_store = db_txn.object_store(OJ_NAME)?;
+            let store = IdbStore::new(object_store);
 
-    //     db.insert_meta("A", "key1", [1].as_ref()).unwrap();
-    //     db.insert_meta("B", "key2", [2].as_ref()).unwrap();
-    //     db.insert_meta("B", "key3", [3].as_ref()).unwrap();
-    //     db.insert_meta("C", "key4", [4].as_ref()).unwrap();
+            store.insert_meta("A", "key1", [1].as_ref()).await.unwrap();
+            store.insert_meta("B", "key2", [2].as_ref()).await.unwrap();
+            store.insert_meta("B", "key3", [3].as_ref()).await.unwrap();
+            store.insert_meta("C", "key4", [4].as_ref()).await.unwrap();
 
-    //     let mut i = db.iter_meta("B").unwrap();
-    //     assert_eq!(i.next(), Some(("key2".as_bytes().into(), [2].into())));
-    //     assert_eq!(i.next(), Some(("key3".as_bytes().into(), [3].into())));
-    //     assert!(i.next().is_none());
-    // }
+            let mut i = store.iter_meta("B").await.unwrap();
+            assert_eq!(i.next().await, Some(("key2".as_bytes().into(), [2].into())));
+            assert_eq!(i.next().await, Some(("key3".as_bytes().into(), [3].into())));
+            assert!(i.next().await.is_none());
+
+            Ok(())
+        })
+        .await
+    }
 
     // #[test]
     // fn doc_iter() {
