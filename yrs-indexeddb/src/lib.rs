@@ -1,7 +1,7 @@
 use std::fmt::Display;
+use std::pin::Pin;
 use std::task::Poll;
 
-use futures::FutureExt;
 use indexed_db_futures::prelude::*;
 use indexed_db_futures::web_sys::wasm_bindgen::JsValue;
 use indexed_db_futures::web_sys::IdbKeyRange;
@@ -60,8 +60,25 @@ impl KVEntry for IdbEntry {
     }
 }
 
+#[allow(dead_code)]
 pub struct IdbStream<'a> {
-    cursor: Option<IdbCursorWithValue<'a, IdbObjectStore<'a>>>,
+    cursor: std::rc::Rc<Option<IdbCursorWithValue<'a, IdbObjectStore<'a>>>>,
+}
+
+/// It's a temp fix because ideally we'd like to query for the next item lazily.
+pub struct IdbStreamTempFix {
+    entries: Box<dyn Iterator<Item = IdbEntry>>,
+}
+
+impl futures::Stream for IdbStreamTempFix {
+    type Item = IdbEntry;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        Poll::Ready(self.entries.next())
+    }
 }
 
 #[derive(Debug)]
@@ -97,59 +114,40 @@ impl<'a> futures::Stream for IdbStream<'a> {
     type Item = IdbEntry;
 
     fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        self: Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let cursor = match self.cursor.as_ref() {
-            None => return Poll::Ready(None),
-            Some(cursor) => cursor,
-        };
+        todo!("Not sure how to to get it working with continue_cursor");
 
-        let key = match cursor.key() {
-            None => return Poll::Ready(None),
-            Some(key) => key,
-        };
+        // web_sys::console::log_1(&"poll_next: beginning".into());
 
-        let value = cursor.value();
+        // let cursor = self.cursor.clone();
+        // let cursor = match cursor.as_ref() {
+        //     None => return Poll::Ready(None),
+        //     Some(cursor) => cursor,
+        // };
 
-        // For some reason, I get ArrayBuffer for the key instead of a Uint8Array, so I gotta
-        // do this instead of dyn_into.
-        let key = Uint8Array::new(&key).to_vec();
-        let value = value.dyn_into::<Uint8Array>().unwrap().to_vec();
+        // let key = match cursor.key() {
+        //     None => return Poll::Ready(None),
+        //     Some(key) => key,
+        // };
 
-        let continue_cursor_res = cursor.advance(1);
-        match continue_cursor_res {
-            Ok(mut fut) => {
-                cx.waker().wake_by_ref();
-                let poll_result = fut.poll_unpin(cx);
-                match poll_result {
-                    Poll::Ready(result) => {
-                        result.unwrap();
-                    }
-                    Poll::Pending => {
-                        return Poll::Pending;
-                    }
-                }
-            }
-            Err(err) => {
-                // The error below is expected when we reach the end of the cursor.
-                // https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continue#invalidstateerror
-                if err.name() == "InvalidStateError" {
-                    return Poll::Ready(None);
-                } else {
-                    panic!("Unexpected error: {}", err.to_string());
-                }
-            }
-        }
+        // // For some reason, I get ArrayBuffer for the key instead of a Uint8Array, so I gotta
+        // // do this instead of dyn_into.
+        // let key = Uint8Array::new(&key).to_vec();
+        // let value = cursor.value().dyn_into::<Uint8Array>().unwrap().to_vec();
 
-        Poll::Ready(Some(IdbEntry { key, value }))
+        // web_sys::console::log_1(&format!("poll_next: key: {:?}", key).into());
+        // web_sys::console::log_1(&format!("poll_next: value: {:?}", value).into());
+
+        // Poll::Ready(Some(IdbEntry { key, value }))
     }
 }
 
 impl<'a> KVStore<'a> for IdbStore<'a> {
     type Error = IdbError;
 
-    type Cursor = IdbStream<'a>;
+    type Cursor = IdbStreamTempFix;
 
     type Entry = IdbEntry;
 
@@ -207,17 +205,33 @@ impl<'a> KVStore<'a> for IdbStore<'a> {
         &'a self,
         from: &'b [u8],
         to: &'b [u8],
-    ) -> Result<IdbStream<'a>, Self::Error> {
-        let from = js_sys::Uint8Array::from(from)
-            .dyn_into::<JsValue>()
-            .unwrap();
-        let to = js_sys::Uint8Array::from(to).dyn_into::<JsValue>().unwrap();
+    ) -> Result<Self::Cursor, Self::Error> {
+        let from = js_sys::Uint8Array::from(from);
+        let to = js_sys::Uint8Array::from(to);
 
         let range = IdbKeyRange::bound(&from, &to).unwrap();
 
         let cursor = self.object_store.open_cursor_with_range(&range)?.await?;
 
-        Ok(IdbStream { cursor })
+        let cursor = match cursor {
+            Some(cursor) => cursor,
+            None => {
+                return Ok(IdbStreamTempFix {
+                    entries: Box::new(std::iter::empty()),
+                })
+            }
+        };
+
+        let entries = cursor.into_vec(0).await?.into_iter().map(|e| {
+            let key = Uint8Array::new(e.key()).to_vec();
+            let value = Uint8Array::new(e.value()).to_vec();
+
+            IdbEntry { key, value }
+        });
+
+        Ok(IdbStreamTempFix {
+            entries: Box::new(entries),
+        })
     }
 
     async fn peek_back(&self, key: &[u8]) -> Result<Option<Self::Entry>, Self::Error> {
@@ -779,25 +793,51 @@ mod tests {
                         let store = IdbStore::new(object_store);
 
                         store.push_update("C", &update).await.unwrap();
+
+                        let items = store
+                            .iter_range(&[0, 0], &[0, 1])
+                            .await
+                            .unwrap()
+                            .collect::<Vec<_>>()
+                            .await;
+
                         db_txn.await.into_result().unwrap();
-                    })
+
+                        let db_txn = db2
+                            .transaction_on_one_with_mode(OJ_NAME, Readwrite)
+                            .unwrap();
+                        let object_store = db_txn.object_store(OJ_NAME).unwrap();
+                        let store = IdbStore::new(object_store);
+
+                        let mut i = store.iter_docs().await.unwrap();
+                        assert_eq!(i.next().await, Some("A".as_bytes().into()));
+                        assert_eq!(i.next().await, Some("B".as_bytes().into()));
+                        assert_eq!(i.next().await, Some("C".as_bytes().into()));
+                        assert!(i.next().await.is_none());
+                    });
                 });
+
                 let text = doc.get_or_insert_text("text");
                 let mut txn = doc.transact_mut();
                 text.push(&mut txn, "hello world");
             }
 
-            {
-                let db_txn = db.transaction_on_one_with_mode(OJ_NAME, Readwrite)?;
-                let object_store = db_txn.object_store(OJ_NAME)?;
-                let store = IdbStore::new(object_store);
+            let db2 = db.clone();
+            spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(1000).await;
 
-                let mut i = store.iter_docs().await.unwrap();
-                assert_eq!(i.next().await, Some("A".as_bytes().into()));
-                assert_eq!(i.next().await, Some("B".as_bytes().into()));
-                assert_eq!(i.next().await, Some("C".as_bytes().into()));
-                assert!(i.next().await.is_none());
-            }
+                let db_txn = db2
+                    .transaction_on_one_with_mode(OJ_NAME, Readwrite)
+                    .unwrap();
+                let object_store = db_txn.object_store(OJ_NAME).unwrap();
+                let store = IdbStore::new(object_store);
+                let items = store
+                    .iter_range(&[0, 0], &[0, 1])
+                    .await
+                    .unwrap()
+                    .collect::<Vec<_>>()
+                    .await;
+            });
 
             // clear doc
             {

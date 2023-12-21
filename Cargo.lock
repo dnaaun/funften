@@ -991,6 +991,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gloo-timers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "gloo-utils"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1181,8 +1193,6 @@ dependencies = [
 [[package]]
 name = "indexed_db_futures"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cc2083760572ee02385ab8b7c02c20925d2dd1f97a1a25a8737a238608f1152"
 dependencies = [
  "accessory",
  "cfg-if",
@@ -3411,6 +3421,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures 0.3.29",
+ "gloo-timers",
  "indexed_db_futures",
  "js-sys",
  "once_cell",

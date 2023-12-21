@@ -62,7 +62,7 @@ pub trait KVStore<'a> {
     /// Cursor type used to iterate over the ordered range of key-value entries.
     type Cursor: Stream<Item = Self::Entry> + Unpin;
     /// Entry type returned by cursor.
-    type Entry: KVEntry;
+    type Entry: KVEntry + std::fmt::Debug;
     /// Type returned from the implementation. Different key-value stores have different
     /// abstractions over the binary data they use.
     type Return: AsRef<[u8]>;
@@ -352,8 +352,60 @@ where
     async fn iter_docs(&'a self) -> Result<DocsNameIter<Self::Cursor, Self::Entry>, Error> {
         let start = Key::from_const([V1, KEYSPACE_OID]);
         let end = Key::from_const([V1, KEYSPACE_DOC]);
+        web_sys::console::log_1(
+            &"==========about to duplicate yrs cursor======="
+                .to_owned()
+                .into(),
+        );
+        let cursor_copy = self.iter_range(&start, &end).await?;
+        let keys_from_cursor: Vec<_> = cursor_copy
+            .map(|e| e.key().to_vec())
+            .collect::<Vec<_>>()
+            .await;
+        // web_sys::console::log_1(
+        //     &format!("keys_from_cursor: {keys_from_cursor:?}")
+        //         .to_owned()
+        //         .into(),
+        // );
+        // web_sys::console::log_1(
+        //     &"==========END of duplicate yrs cursor======="
+        //         .to_owned()
+        //         .into(),
+        // );
+        // web_sys::console::log_1(
+        //     &"==========about to duplicate yrs cursor 2======="
+        //         .to_owned()
+        //         .into(),
+        // );
+        // let cursor_copy2 = self.iter_range(&start, &end).await?;
+        // let keys_from_cursor2: Vec<_> = cursor_copy2
+        //     .map(|e| e.key().to_vec())
+        //     .collect::<Vec<_>>()
+        //     .await;
+        // web_sys::console::log_1(
+        //     &format!("keys_from_cursor2: {keys_from_cursor2:?}")
+        //         .to_owned()
+        //         .into(),
+        // );
+        // web_sys::console::log_1(
+        //     &"==========END of duplicate yrs cursor 2======="
+        //         .to_owned()
+        //         .into(),
+        // );
+
+//         web_sys::console::log_1(
+//             &"==========about to do actual iter_range======="
+//                 .to_owned()
+//                 .into(),
+//         );
         let cursor = self.iter_range(&start, &end).await?;
-        Ok(DocsNameIter { cursor, start, end })
+//         web_sys::console::log_1(
+//             &"==========END of actual iter_range======="
+//                 .to_owned()
+//                 .into(),
+//         );
+
+        Ok(DocsNameIter { cursor })
     }
 
     /// Returns an iterator over all metadata entries stored for a given document.
@@ -523,8 +575,6 @@ where
 {
     #[pin]
     cursor: S,
-    start: Key<2>,
-    end: Key<2>,
 }
 
 impl<S, E> Stream for DocsNameIter<S, E>
