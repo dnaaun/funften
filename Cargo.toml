@@ -7,5 +7,7 @@ members = [
 "yrs_struct_derive",
 "core_logic",
 "funften_org",
-"yrs-indexeddb"
-, "yrs-kvstore-async"]
+"yrs-indexeddb",
+"yrs-kvstore-async",
+"yrs-tokio-postgres"
+]
